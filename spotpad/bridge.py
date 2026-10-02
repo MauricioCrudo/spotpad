@@ -234,10 +234,13 @@ class ProTools:
             sel_in, sel_out = self._selection_samples(e)
             if sel_out <= sel_in:
                 raise SpotError("Marcá una región primero")
+            log.info("group-on: rango %s-%s → seleccionar track «%s»", sel_in, sel_out, target.name)
             e.select_tracks_by_name([target.name])
+            log.info("group-on: re-aplicar selección")
             # Re-aplica el rango sobre el track recién seleccionado
             e.set_timeline_selection(in_time=str(sel_in), out_time=str(sel_out),
                                      location_type=pt.TLType_Samples)
+            log.info("group-on: GroupClips")
             try:
                 e.group_clips()
             except Exception as ex:
@@ -245,6 +248,7 @@ class ProTools:
                     raise SpotError("Tu Pro Tools no tiene GroupClips en el SDK: hace falta 2024.6 o posterior")
                 raise
             clip = (name or target.name).strip()
+            log.info("group-on: renombrar a «%s»", clip)
             e.rename_selected_clip(new_name=clip, rename_file=False, clip_location=pt.CL_Timeline)
             return {"ok": True, "msg": f"«{clip}» en {target.name}"}
         return self._call(f)
