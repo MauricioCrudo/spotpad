@@ -22,7 +22,7 @@ import webbrowser
 import bridge
 from bridge import DATA, DIAG_FILE, MockProTools, ProTools, ipad_url, start_server
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.3.1"
 log = logging.getLogger("spotpad")
 
 
@@ -107,8 +107,13 @@ def main():
         threading.Thread(target=work, daemon=True).start()
 
     def quit_app(icon, _):
-        stop()
-        icon.stop()
+        log.info("Saliendo")
+        try:
+            stop()
+            icon.stop()
+        finally:
+            # Salida inmediata: si Pro Tools dejó un pedido colgado, no esperamos por él
+            threading.Timer(0.3, lambda: os._exit(0)).start()
 
     menu = Menu(
         Item(lambda _: f"iPad: {ipad_url(a.port)}", lambda *_: webbrowser.open(local + "/conectar")),

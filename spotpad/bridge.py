@@ -121,10 +121,15 @@ class SpotError(Exception):
 class ProTools:
     APP = ("Mauricio Crudo", "SpotPad")
 
+    TIMEOUT = 10        # segundos que esperamos a Pro Tools antes de darlo por ocupado
+    BUSY = "Pro Tools no responde. ¿Hay una ventana o diálogo abierto en Pro Tools?"
+
     def __init__(self, debug=False):
         self._engine = None
-        self._lock = threading.Lock()
         self._debug = debug
+        self._guard = threading.Lock()
+        self._worker = None          # hilo único que habla con Pro Tools
+        self._stuck = None           # pedido colgado (Pro Tools no contestó)
 
     # -- conexión ---------------------------------------------------------- #
     def _eng(self):
@@ -135,19 +140,57 @@ class ProTools:
                 self._engine.client.auditor.enabled = True
         return self._engine
 
-    def _call(self, fn):
-        with self._lock:
-            try:
-                return fn(self._eng())
-            except SpotError:
-                raise
-            except Exception as e:          # conexión caída, PT cerrado, etc.
-                log.exception("PTSL")
-                msg = str(e)
-                if "UNAVAILABLE" in msg or "failed to connect" in msg.lower():
-                    self._engine = None
-                    raise SpotError("No encuentro Pro Tools (¿está abierto con una sesión?)")
-                raise SpotError(msg.splitlines()[0][:200])
+    def _run(self, fn):
+        try:
+            return fn(self._eng())
+        except SpotError:
+            raise
+        except Exception as e:          # conexión caída, PT cerrado, etc.
+            msg = str(e)
+            if "PT_NoOpenedSession" in msg:
+                log.info("PTSL: no hay sesión abierta")
+                raise SpotError("No hay ninguna sesión abierta en Pro Tools")
+            log.exception("PTSL")
+            if "UNAVAILABLE" in msg or "failed to connect" in msg.lower():
+                self._engine = None
+                raise SpotError("No encuentro Pro Tools (¿está abierto?)")
+            raise SpotError(msg.splitlines()[0][:200])
+
+    def _call(self, fn, timeout=None):
+        """Corre fn(engine) en el hilo de Pro Tools, sin dejar que un pedido colgado
+        trabe todo: si Pro Tools no contesta a tiempo, devolvemos error y los pedidos
+        siguientes fallan rápido hasta que ese termine."""
+        from concurrent.futures import Future, TimeoutError as FutTimeout
+        with self._guard:
+            if self._stuck is not None:
+                if not self._stuck.done():
+                    raise SpotError(self.BUSY)
+                self._stuck = None
+                log.info("PTSL: Pro Tools volvió a responder")
+            if self._worker is None:
+                import queue
+                self._q = queue.Queue()
+
+                def loop():
+                    while True:
+                        f, job = self._q.get()
+                        if f.set_running_or_notify_cancel():
+                            try:
+                                f.set_result(self._run(job))
+                            except BaseException as ex:   # noqa: BLE001
+                                f.set_exception(ex)
+                # daemon: si Pro Tools queda colgado, igual se puede salir de la app
+                self._worker = threading.Thread(target=loop, daemon=True, name="ptsl")
+                self._worker.start()
+            fut = Future()
+            self._q.put((fut, fn))
+        try:
+            return fut.result(timeout or self.TIMEOUT)
+        except FutTimeout:
+            with self._guard:
+                self._stuck = fut
+            log.warning("PTSL: Pro Tools no respondió en %ss", timeout or self.TIMEOUT)
+            raise SpotError(self.BUSY)
 
     def status(self):
         def f(e):
@@ -209,15 +252,15 @@ class ProTools:
     def diag(self):
         """Lo que hace falta ver de tu sesión real, en texto para pegar."""
         from ptsl import PTSL_pb2 as pt
-        out = []
+        return self._call(lambda e: self._diag(e, pt, []), timeout=120)
 
+    def _diag(self, e, pt, out):
         def step(title, fn):
             try:
                 out.append(f"## {title}\n{fn()}")
             except Exception as ex:
                 out.append(f"## {title}\nERROR: {ex}")
 
-        e = self._eng()
         step("Sesión", lambda: f"{e.session_name()}  ·  PTSL {e.ptsl_version()}")
         step("Timecode", lambda: f"start={e.session_start_time()}  rate="
              f"{pt.SessionTimeCodeRate.Name(e.session_timecode_rate())}  sr={e.session_sample_rate()}")
@@ -363,7 +406,7 @@ class ProTools:
                     })
             clips.sort(key=lambda c: (c["start"], order.get(c["track"], 0)))
             return {"ok": True, "paused": False, "clips": clips}
-        return self._call(f)
+        return self._call(f, timeout=30)
 
     def locate(self, start: int, end: int):
         from ptsl import PTSL_pb2 as pt
@@ -530,7 +573,7 @@ def make_app(pt):
         TARGETS_FILE.write_text(json.dumps(ids, indent=2), "utf-8")
         return web.json_response(ids)
 
-    @routes.post("/api/rename/{track_id}")
+    @routes.post("/api/rename/{track_id:[^/]+}")
     async def rename(req):
         return await run(pt.rename_track_to_selection, req.match_info["track_id"], current_prefix(req))
 
@@ -575,7 +618,7 @@ def make_app(pt):
     async def layout(_):
         return await run(pt.layout, excluded())
 
-    @routes.post("/api/group-on/{track_id}")
+    @routes.post("/api/group-on/{track_id:[^/]+}")
     async def group_on(req):
         try:
             body = await req.json()
@@ -584,7 +627,7 @@ def make_app(pt):
         return await run(pt.group_on_track, req.match_info["track_id"], str(body.get("name", "")))
 
     # Atajo por nombre de track: /api/group-on-name/Wood
-    @routes.post("/api/group-on-name/{name}")
+    @routes.post("/api/group-on-name/{name:[^/]+}")
     async def group_on_name(req):
         name = req.match_info["name"]
         lay = await asyncio.get_running_loop().run_in_executor(None, pt.layout, excluded())
