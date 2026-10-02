@@ -1,0 +1,21 @@
+{
+  "track_prefixes": ["Prps", "Fts"],
+  "categories": [
+    {
+      "id": "hands",
+      "label": "Manos",
+      "color": "#E8A33D",
+      "items": [
+        "Hands body",
+        "Hands skin",
+        "Hands clap",
+        "Hands punch",
+        "Hands grab body",
+        "Hands surface wood",
+        "Hands surface metal",
+        "Hands surface marble",
+        "Hands surface concrete"
+      ]
+    }
+  ]
+}

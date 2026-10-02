@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+spotpad/build_icon.png
+spotpad/targets.json
+spotpad/state.json
+spotpad/spot_tracks.json
+spotpad/diag.txt
+spotpad/spotpad.log
+spotpad/.first_run_done

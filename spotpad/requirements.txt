@@ -1,0 +1,3 @@
+py-ptsl>=602
+aiohttp>=3.9
+qrcode>=7.4

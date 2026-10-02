@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#121214">
+<title>SpotPad</title>
+<style>
+:root{
+  --bg:#121214; --panel:#1b1b1f; --panel2:#24242a; --line:#2f2f37;
+  --text:#ecebe6; --dim:#8d8c94; --accent:#E8A33D; --ok:#5fc47e; --err:#e2574c;
+  --r:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font:15px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+
+header{display:flex;align-items:center;gap:12px;padding:14px 16px 10px}
+.brand{font-weight:700;letter-spacing:.08em;font-size:13px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--dim);flex:none}
+.dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.dot.off{background:var(--err)}
+#session{color:var(--dim);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.hbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;
+  padding:9px 14px;font:inherit;font-size:14px}
+.hbtn:active{background:var(--line)}
+
+main{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;padding:0 16px 16px;height:calc(100% - 60px)}
+@media (max-width:820px){main{grid-template-columns:1fr;height:auto}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;display:flex;flex-direction:column;min-height:0}
+h2{margin:0 0 12px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600;
+  display:flex;justify-content:space-between;align-items:center}
+h2 b{color:var(--accent);font-weight:600}
+
+.cats{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto}
+.cat{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);font:inherit;font-size:14px}
+.cat.sel{color:#121214;background:var(--cc,var(--accent));border-color:transparent;font-weight:600}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;flex:1;grid-auto-rows:minmax(84px,1fr)}
+.pad{position:relative;border:1px solid var(--line);border-radius:var(--r);background:var(--panel2);color:var(--text);
+  font-family:inherit;font-weight:600;font-size:17px;line-height:1.2;text-align:left;padding:14px;display:flex;flex-direction:column;justify-content:space-between;
+  transition:transform .06s, background .15s}
+.pad .k{font:500 11px ui-monospace,Menlo,monospace;color:var(--dim)}
+.pad .sub{color:var(--cc,var(--accent));font-size:12px;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+.pad:active{transform:scale(.97);background:#2c2c33}
+.pad.busy{opacity:.55}
+.pad.flash-ok{background:color-mix(in srgb,var(--ok) 28%,var(--panel2))}
+.pad.flash-err{background:color-mix(in srgb,var(--err) 30%,var(--panel2))}
+
+.namebar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.namebar input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);
+  font:inherit;font-size:16px;padding:10px 12px;-webkit-user-select:text;user-select:text}
+.namebar input:focus{outline:none;border-color:var(--accent)}
+.recents{display:flex;gap:6px;overflow-x:auto;margin:-2px 0 10px;min-height:0}
+.recents:empty{display:none}
+.chip{flex:none;border:1px solid var(--line);background:none;color:var(--dim);border-radius:999px;padding:6px 11px;font:inherit;font-size:13px}
+.chip:active{background:var(--panel2)}
+.gwrap{flex:1;overflow:auto;min-height:0}
+.ghead{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:12px 2px 8px}
+.ghead:first-child{margin-top:0}
+.tgrid{margin-bottom:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;grid-auto-rows:72px}
+.tpad{position:relative;border:1px solid var(--line);border-left:6px solid var(--tc,var(--line));border-radius:var(--r);
+  background:var(--panel2);color:var(--text);font:inherit;font-weight:600;font-size:16px;text-align:left;padding:10px 12px;
+  display:flex;flex-direction:column;justify-content:space-between;transition:transform .06s, background .15s}
+.tpad .k{font:500 11px ui-monospace,Menlo,monospace;color:var(--dim)}
+.tpad:active{transform:scale(.97);background:#2c2c33}
+.tpad.busy{opacity:.55}
+.tpad.flash-ok{background:color-mix(in srgb,var(--ok) 28%,var(--panel2))}
+.tpad.flash-err{background:color-mix(in srgb,var(--err) 30%,var(--panel2))}
+.cat.folder{border-style:solid}
+.cat.preset{border-style:dashed}
+.peek{border:1px dashed var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
+.peek .lbl{font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+.peek .name{font-size:18px;font-weight:600;margin-top:4px;min-height:22px}
+.peek .src{font-size:12px;color:var(--dim)}
+.targets{display:flex;flex-direction:column;gap:8px;overflow:auto;flex:1}
+.tgt{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--panel2);border-radius:var(--r);
+  padding:14px;color:var(--text);font:inherit;text-align:left;min-height:62px}
+.tgt:active{background:#2c2c33}
+.tgt .n{font:600 12px ui-monospace,Menlo,monospace;color:#121214;background:var(--accent);border-radius:6px;padding:3px 7px}
+.tgt .t{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tgt .arrow{color:var(--dim);font-size:13px}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:12px}
+.seg button{flex:1;border:0;background:none;color:var(--dim);font:inherit;font-weight:600;font-size:16px;padding:12px;border-radius:9px;letter-spacing:.04em}
+.seg button.sel{background:var(--accent);color:#121214}
+.empty{color:var(--dim);font-size:14px;padding:10px 2px}
+
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:18px;padding:0;
+  width:min(520px,92vw);max-height:80vh}
+dialog::backdrop{background:#000a}
+.dhead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.dlist{overflow:auto;max-height:60vh;padding:6px 8px}
+.row{display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:10px}
+.row:active{background:var(--panel2)}
+.row .ix{width:28px;color:var(--dim);font:12px ui-monospace,Menlo,monospace}
+.row .nm{flex:1}
+.chk{width:24px;height:24px;border-radius:7px;border:1.5px solid var(--line);display:grid;place-items:center;
+  font:700 12px ui-monospace,Menlo,monospace;color:#121214}
+.row.on .chk{background:var(--accent);border-color:var(--accent)}
+
+.views{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.views button{border:0;background:none;color:var(--dim);font:inherit;font-size:14px;font-weight:600;padding:7px 14px;border-radius:7px}
+.views button.sel{background:var(--accent);color:#121214}
+.views .badge{display:inline-block;min-width:18px;margin-left:6px;padding:1px 5px;border-radius:9px;background:var(--err);color:#fff;font-size:11px;text-align:center}
+.views .badge:empty{display:none}
+#viewList{display:none;padding:0 16px 16px;height:calc(100% - 60px)}
+body.list #viewPads{display:none}
+body.list #viewList{display:flex}
+#viewList section{flex:1}
+.ltools{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.lstat{flex:1;color:var(--dim);font-size:13px;min-width:160px}
+.lstat.paused{color:var(--accent)}
+.clips{overflow:auto;flex:1;margin:0 -6px}
+.clip{display:grid;grid-template-columns:118px 1fr auto;gap:2px 14px;align-items:center;padding:11px 10px;border-radius:10px;border-bottom:1px solid var(--line)}
+.clip:active{background:var(--panel2)}
+.clip .tin{font:600 16px ui-monospace,"SF Mono",Menlo,monospace}
+.clip .tout{font:12px ui-monospace,"SF Mono",Menlo,monospace;color:var(--dim)}
+.clip .cn{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clip .tr{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clip .du{grid-row:span 2;font:12px ui-monospace,Menlo,monospace;color:var(--dim);text-align:right}
+.clip.new{background:color-mix(in srgb,var(--accent) 14%,transparent);border-left:3px solid var(--accent)}
+.clip.new .cn::after{content:"NUEVO";margin-left:8px;font:700 10px ui-monospace,Menlo,monospace;color:#121214;background:var(--accent);border-radius:4px;padding:2px 5px;vertical-align:2px}
+.clip.here{outline:1.5px solid var(--ok)}
+
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+  background:var(--panel2);border:1px solid var(--line);padding:12px 18px;border-radius:12px;opacity:0;
+  transition:.2s;max-width:90vw;font-size:15px;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%)}
+#toast.err{border-color:var(--err);color:#ffb4ac}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <span class="brand">SPOTPAD</span>
+  <span id="session" class="mono">conectando…</span>
+  <div class="views"><button id="vPads" class="sel">Botonera</button><button id="vList">Lista<span class="badge" id="newCount"></span></button></div>
+  <button class="hbtn" id="undo">↶ Deshacer</button>
+</header>
+
+<main id="viewPads">
+  <section>
+    <h2><span>Spotting · marcá la región y tocá</span><button class="hbtn" id="reload">↻ Tracks</button></h2>
+    <div class="cats" id="cats"></div>
+    <div class="namebar" id="namebar"><input id="clipName" placeholder="Nombre del clip (vacío = nombre del track)" autocomplete="off" autocapitalize="words"><button class="hbtn" id="clearName">×</button></div>
+    <div class="recents" id="recents"></div>
+    <div class="gwrap" id="gwrap"></div>
+  </section>
+
+  <section>
+    <h2><span>Renombrar track</span><button class="hbtn" id="edit">Elegir tracks</button></h2>
+    <div class="seg" id="seg"></div>
+    <div class="peek" id="peek">
+      <div class="lbl">Clip seleccionado · tocá para leer</div>
+      <div class="name" id="peekName">—</div>
+      <div class="src mono" id="peekSrc"></div>
+    </div>
+    <div class="targets" id="targets"></div>
+  </section>
+</main>
+
+<div id="viewList">
+  <section>
+    <div class="ltools">
+      <span class="lstat" id="lstat">—</span>
+      <button class="hbtn" id="seen">Marcar vistos</button>
+      <button class="hbtn" id="refresh">↻ Actualizar</button>
+      <button class="hbtn" id="spotEdit">Tracks de spotting</button>
+    </div>
+    <div class="clips" id="clips"></div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <div class="dhead"><b id="dlgTitle">Tracks destino</b><button class="hbtn" id="done">Listo</button></div>
+  <div class="dlist" id="dlist"></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let presets = [], catIdx = 0, tracks = [], targets = [], prefix = '', prefixOpts = [], lastClip = '';
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...opts});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) throw new Error(j.error || `Error ${r.status}`);
+  return j;
+}
+
+let toastT;
+function toast(msg, err) {
+  const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = err ? 'err' : '', err ? 3500 : 1600);
+}
+function buzz(ok) { try { navigator.vibrate && navigator.vibrate(ok ? 15 : [40, 40, 40]); } catch {} }
+
+/* ---------- estado de conexión ---------- */
+async function poll() {
+  try {
+    const s = await api('/api/status');
+    $('#dot').className = 'dot ' + (s.connected ? 'on' : 'off');
+    $('#session').textContent = s.connected ? s.session + (s.mock ? '  ·  MOCK' : '') : s.error;
+    if (s.connected && s.session !== sessionName) { const first = !sessionName; sessionName = s.session; seen = null; if (!first) loadLayout(true); }
+  } catch { $('#dot').className = 'dot off'; $('#session').textContent = 'sin conexión con la Mac'; }
+}
+
+/* ---------- parte 1: botonera ---------- */
+// Pestañas: una por carpeta de la sesión (Surfaces, Footsteps, Props…) + las de presets.json
+let layout = {tabs: []}, tabKey = null;
+const ls = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+function allTabs() {
+  return [...layout.tabs.map(t => ({key: 'f:' + t.name, label: t.name, kind: 'folder', tab: t})),
+          ...presets.map(p => ({key: 'p:' + p.id, label: p.label, kind: 'preset', cat: p}))];
+}
+function tcolor(c) {
+  if (!c) return '';
+  let h = String(c).replace(/^#/, '');
+  if (/^[0-9a-f]{8}$/i.test(h)) h = h.slice(2);          // ARGB → RGB
+  return /^[0-9a-f]{6}$/i.test(h) ? '#' + h : '';
+}
+async function loadLayout(quiet) {
+  try { layout = await api('/api/layout'); }
+  catch (e) { layout = {tabs: []}; if (!quiet) toast(e.message, true); }
+  const tabs = allTabs();
+  if (!tabs.find(t => t.key === tabKey)) tabKey = ls.get('spotpad.tab', null);
+  if (!tabs.find(t => t.key === tabKey)) tabKey = tabs[0] && tabs[0].key;
+  renderCats(); renderGrid();
+}
+function renderCats() {
+  const c = $('#cats'); c.innerHTML = '';
+  allTabs().forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'cat ' + t.kind + (t.key === tabKey ? ' sel' : ''); b.textContent = t.label;
+    if (t.cat) b.style.setProperty('--cc', t.cat.color);
+    b.onclick = () => { tabKey = t.key; ls.set('spotpad.tab', tabKey); $('#clipName').value = ''; renderCats(); renderGrid(); loadLayout(true); };
+    c.append(b);
+  });
+}
+function renderGrid() {
+  const w = $('#gwrap'), t = allTabs().find(t => t.key === tabKey); w.innerHTML = '';
+  $('#namebar').style.display = $('#recents').style.display = (t && t.kind === 'folder') ? '' : 'none';
+  if (!t) { w.innerHTML = '<div class="empty">No encontré carpetas con tracks en la sesión.</div>'; return; }
+  if (t.kind === 'preset') return renderPresetGrid(w, t.cat);
+  let n = 0;
+  t.tab.groups.forEach(g => {
+    if (g.name) { const h = document.createElement('div'); h.className = 'ghead'; h.textContent = g.name; w.append(h); }
+    const grid = document.createElement('div'); grid.className = 'tgrid'; w.append(grid);
+    g.tracks.forEach(tr => {
+      const b = document.createElement('button'); b.className = 'tpad';
+      const col = tcolor(tr.color); if (col) b.style.setProperty('--tc', col);
+      b.innerHTML = '<span class="k"></span><span class="lab"></span>';
+      b.querySelector('.k').textContent = ++n; b.querySelector('.lab').textContent = tr.name;
+      b.onclick = async () => {
+        if (b.classList.contains('busy')) return;
+        b.classList.add('busy');
+        const name = $('#clipName').value.trim();
+        try { const r = await api('/api/group-on/' + encodeURIComponent(tr.id), {method: 'POST', body: JSON.stringify({name})});
+              flash(b, true); toast(r.msg); if (name) { addRecent(name); $('#clipName').value = ''; } }
+        catch (e) { flash(b, false); toast(e.message, true); }
+        b.classList.remove('busy');
+      };
+      grid.append(b);
+    });
+  });
+}
+// Nombres recientes del campo (p. ej. personajes en tracks de calzado: Sonia, Extra Left)
+function addRecent(n) {
+  const r = ls.get('spotpad.recent', []).filter(x => x !== n); r.unshift(n);
+  ls.set('spotpad.recent', r.slice(0, 15)); renderRecents();
+}
+function renderRecents() {
+  const box = $('#recents'); box.innerHTML = '';
+  ls.get('spotpad.recent', []).forEach(n => {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = n;
+    b.onclick = () => { $('#clipName').value = n; buzz(true); };
+    box.append(b);
+  });
+}
+$('#clearName').onclick = () => { $('#clipName').value = ''; $('#clipName').blur(); };
+$('#reload').onclick = async () => { await loadLayout(); buzz(true); };
+
+function renderPresetGrid(w, cat) {
+  const g = document.createElement('div'); g.className = 'grid'; w.append(g);
+  cat.items.forEach((name, i) => {
+    const b = document.createElement('button');
+    b.className = 'pad'; b.style.setProperty('--cc', cat.color);
+    const parts = name.split(' '), head = parts.shift();
+    b.innerHTML = `<span class="k">${i + 1}</span><span><div class="sub"></div><div class="lab"></div></span>`;
+    b.querySelector('.sub').textContent = head;
+    b.querySelector('.lab').textContent = parts.join(' ') || head;
+    b.onclick = async () => {
+      if (b.classList.contains('busy')) return;
+      b.classList.add('busy');
+      try { const r = await api('/api/group', {method: 'POST', body: JSON.stringify({name})});
+            flash(b, true); toast(r.msg); }
+      catch (e) { flash(b, false); toast(e.message, true); }
+      b.classList.remove('busy');
+    };
+    g.append(b);
+  });
+}
+function flash(el, ok) {
+  buzz(ok); const c = ok ? 'flash-ok' : 'flash-err';
+  el.classList.add(c); setTimeout(() => el.classList.remove(c), 450);
+}
+
+/* ---------- parte 2: tracks destino ---------- */
+async function loadTracks() { tracks = await api('/api/tracks').catch(e => { toast(e.message, true); return []; }); }
+async function loadTargets() { targets = await api('/api/targets').catch(() => []); }
+
+function renderTargets() {
+  const box = $('#targets'); box.innerHTML = '';
+  if (!targets.length) { box.innerHTML = '<div class="empty">Elegí los tracks que vas a renombrar con «Elegir tracks».</div>'; return; }
+  targets.forEach((id, i) => {
+    const t = tracks.find(t => t.id === id);
+    const b = document.createElement('button'); b.className = 'tgt';
+    b.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span><span class="arrow">← clip</span>`;
+    b.querySelector('.t').textContent = t ? t.name : '(track borrado)';
+    b.onclick = async () => {
+      try { const r = await api('/api/rename/' + encodeURIComponent(id), {method: 'POST'});
+            flash(b, true); toast(r.msg); await loadTracks(); renderTargets(); }
+      catch (e) { flash(b, false); toast(e.message, true); }
+    };
+    box.append(b);
+  });
+}
+
+/* prefijo Prps / Fts */
+const withPrefix = c => !prefix || c.toLowerCase().startsWith(prefix.toLowerCase() + ' ') ? c : prefix + ' ' + c;
+function renderSeg() {
+  const seg = $('#seg'); seg.innerHTML = '';
+  prefixOpts.forEach(p => {
+    const b = document.createElement('button'); b.textContent = p; b.className = p === prefix ? 'sel' : '';
+    b.onclick = async () => {
+      try { const r = await api('/api/prefix', {method: 'PUT', body: JSON.stringify({prefix: p})});
+            prefix = r.prefix; renderSeg(); renderPeek(); buzz(true); }
+      catch (e) { toast(e.message, true); }
+    };
+    seg.append(b);
+  });
+}
+function renderPeek() { $('#peekName').textContent = lastClip ? withPrefix(lastClip) : '—'; }
+
+$('#peek').onclick = async () => {
+  try { const r = await api('/api/peek'); lastClip = r.clip; renderPeek(); $('#peekSrc').textContent = 'clip «' + r.clip + '» en ' + r.track; buzz(true); }
+  catch (e) { lastClip = ''; renderPeek(); $('#peekSrc').textContent = ''; toast(e.message, true); }
+};
+
+let pick = null;   // {ids, save}
+async function openPicker(title, ids, save) {
+  await loadTracks();
+  pick = {ids, save}; $('#dlgTitle').textContent = title;
+  const targets = ids;
+  const list = $('#dlist'); list.innerHTML = '';
+  tracks.forEach(t => {
+    const r = document.createElement('div'); r.className = 'row';
+    const draw = () => { const k = targets.indexOf(t.id); r.classList.toggle('on', k >= 0);
+                         r.querySelector('.chk').textContent = k >= 0 ? k + 1 : ''; };
+    r.innerHTML = '<span class="ix"></span><span class="nm"></span><span class="chk"></span>';
+    r.querySelector('.ix').textContent = t.index; r.querySelector('.nm').textContent = t.name;
+    r.onclick = () => { const k = targets.indexOf(t.id);
+      k >= 0 ? targets.splice(k, 1) : targets.push(t.id); list.querySelectorAll('.row').forEach(x => x._draw()); };
+    r._draw = draw; draw(); list.append(r);
+  });
+  $('#dlg').showModal();
+}
+$('#edit').onclick = () => openPicker('Tracks destino', targets, async ids => {
+  await api('/api/targets', {method: 'PUT', body: JSON.stringify(ids)}); renderTargets(); });
+$('#done').onclick = async () => {
+  await pick.save(pick.ids).catch(e => toast(e.message, true));
+  $('#dlg').close();
+};
+
+$('#undo').onclick = async () => {
+  try { const r = await api('/api/undo', {method: 'POST'}); toast(r.msg); } catch (e) { toast(e.message, true); }
+};
+
+/* ---------- lista de spotting en vivo ---------- */
+let sessionName = '', clips = [], seen = null, spotTracks = [], listT, lastOk = null;
+const key = c => c.track + '|' + c.clip + '|' + c.start;
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem('spotpad.seen.' + sessionName) || 'null'); } catch { return null; } },
+  set(v) { try { localStorage.setItem('spotpad.seen.' + sessionName, JSON.stringify(v)); } catch {} },
+};
+function isList() { return document.body.classList.contains('list'); }
+function setView(list) {
+  document.body.classList.toggle('list', list);
+  $('#vPads').classList.toggle('sel', !list); $('#vList').classList.toggle('sel', list);
+  if (list) refreshList();
+}
+$('#vPads').onclick = () => setView(false);
+$('#vList').onclick = () => setView(true);
+
+async function refreshList(manual) {
+  try {
+    const r = await api('/api/spotting');
+    if (r.paused) {
+      $('#lstat').textContent = 'En pausa mientras Pro Tools graba o reproduce' + (lastOk ? ' · última lectura ' + lastOk : '');
+      $('#lstat').className = 'lstat paused';
+      return;
+    }
+    clips = r.clips;
+    if (r.need_tracks) {
+      clips = []; $('#newCount').textContent = '';
+      $('#lstat').textContent = 'Sin tracks de spotting elegidos'; $('#lstat').className = 'lstat paused';
+      $('#clips').innerHTML = '<div class="empty">Elegí con «Tracks de spotting» qué tracks mirar. Solo se leen esos: los clips grabados en otros tracks no aparecen ni cuentan como nuevos.</div>';
+      return;
+    }
+    if (seen === null) { seen = store.get(); if (seen === null) { seen = clips.map(key); store.set(seen); } }
+    lastOk = new Date().toLocaleTimeString('es-AR');
+    renderList();
+    if (manual) buzz(true);
+  } catch (e) {
+    $('#lstat').textContent = e.message; $('#lstat').className = 'lstat paused';
+  }
+}
+function renderList() {
+  const s = new Set(seen), box = $('#clips'), nNew = clips.filter(c => !s.has(key(c))).length;
+  $('#newCount').textContent = nNew || '';
+  $('#lstat').className = 'lstat';
+  $('#lstat').textContent = `${clips.length} clips` + (nNew ? ` · ${nNew} nuevos` : '') + ` · actualizado ${lastOk}`;
+  const top = box.scrollTop; box.innerHTML = '';
+  if (!clips.length) { box.innerHTML = '<div class="empty">No hay clips en los tracks de spotting.</div>'; return; }
+  clips.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'clip' + (s.has(key(c)) ? '' : ' new');
+    d.innerHTML = '<span class="tin"></span><span class="cn"></span><span class="du"></span><span class="tout"></span><span class="tr"></span>';
+    d.querySelector('.tin').textContent = c.tc_in;
+    d.querySelector('.tout').textContent = '→ ' + c.tc_out;
+    d.querySelector('.cn').textContent = c.clip || '(sin nombre)';
+    d.querySelector('.tr').textContent = c.track;
+    d.querySelector('.du').textContent = c.dur;
+    d.onclick = async () => {
+      try { await api('/api/locate', {method: 'POST', body: JSON.stringify({start: c.start, end: c.end})});
+            box.querySelectorAll('.here').forEach(x => x.classList.remove('here')); d.classList.add('here');
+            if (!s.has(key(c))) { seen.push(key(c)); store.set(seen); renderList(); }
+            buzz(true); }
+      catch (e) { toast(e.message, true); }
+    };
+    box.append(d);
+  });
+  box.scrollTop = top;
+}
+$('#refresh').onclick = () => refreshList(true);
+$('#seen').onclick = () => { seen = clips.map(key); store.set(seen); renderList(); buzz(true); };
+$('#spotEdit').onclick = async () => {
+  spotTracks = await api('/api/spot-tracks').catch(() => []);
+  openPicker('Tracks de spotting', spotTracks, async ids => {
+    await api('/api/spot-tracks', {method: 'PUT', body: JSON.stringify(ids)}); refreshList(); });
+};
+// Cada 8 s, solo con la lista a la vista; el badge de nuevos se actualiza cada 30 s igual
+setInterval(() => { if (document.visibilityState === 'visible' && isList()) refreshList(); }, 8000);
+setInterval(() => { if (document.visibilityState === 'visible' && !isList()) refreshList(); }, 30000);
+
+(async () => {
+  poll(); setInterval(poll, 4000);
+  presets = (await api('/api/presets')).categories || [];
+  renderRecents(); await loadLayout(true);
+  const pr = await api('/api/prefix'); prefix = pr.prefix; prefixOpts = pr.options; renderSeg();
+  await Promise.all([loadTracks(), loadTargets()]); renderTargets();
+})();
+</script>
+</body>
+</html>
