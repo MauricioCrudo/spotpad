@@ -24,8 +24,9 @@ try:                                             # mientras sigue colgado: falla
 except SpotError:
     pass
 assert time.time() - t1 < 0.2
-release.set(); time.sleep(0.2)                   # Pro Tools vuelve
+pt.RETRY_AFTER = 0.3; time.sleep(0.4)            # pasado un rato: reconecta aunque el viejo siga colgado
 assert pt._call(lambda e: "ok") == "ok"
+release.set()
 try:
     pt._call(lambda e: (_ for _ in ()).throw(RuntimeError("ErrType 106: PT_NoOpenedSession (There is no open session.)")))
 except SpotError as e:

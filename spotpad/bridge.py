@@ -19,6 +19,7 @@ import shutil
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
 
 from aiohttp import web
@@ -122,6 +123,7 @@ class ProTools:
     APP = ("Mauricio Crudo", "SpotPad")
 
     TIMEOUT = 10        # segundos que esperamos a Pro Tools antes de darlo por ocupado
+    RETRY_AFTER = 15    # después de un cuelgue, cada cuánto probamos con una conexión nueva
     BUSY = "Pro Tools no responde. ¿Hay una ventana o diálogo abierto en Pro Tools?"
 
     def __init__(self, debug=False):
@@ -163,10 +165,15 @@ class ProTools:
         from concurrent.futures import Future, TimeoutError as FutTimeout
         with self._guard:
             if self._stuck is not None:
-                if not self._stuck.done():
+                fut0, since = self._stuck
+                if not fut0.done() and time.monotonic() - since < self.RETRY_AFTER:
                     raise SpotError(self.BUSY)
+                if not fut0.done():
+                    # Pedido colgado: lo abandonamos y probamos con una conexión nueva
+                    log.warning("PTSL: abandono el pedido colgado y reconecto")
+                    self._worker = None
+                    self._engine = None
                 self._stuck = None
-                log.info("PTSL: Pro Tools volvió a responder")
             if self._worker is None:
                 import queue
                 self._q = queue.Queue()
@@ -188,7 +195,7 @@ class ProTools:
             return fut.result(timeout or self.TIMEOUT)
         except FutTimeout:
             with self._guard:
-                self._stuck = fut
+                self._stuck = (fut, time.monotonic())
             log.warning("PTSL: Pro Tools no respondió en %ss", timeout or self.TIMEOUT)
             raise SpotError(self.BUSY)
 
