@@ -73,6 +73,7 @@ h2 b{color:var(--accent);font-weight:600}
 .tpad.flash-ok{background:color-mix(in srgb,var(--ok) 28%,var(--panel2))}
 .tpad.flash-err{background:color-mix(in srgb,var(--err) 30%,var(--panel2))}
 .cat.folder{border-style:solid}
+.cathint{align-self:center;color:var(--dim);font-size:13px;padding:0 4px;white-space:nowrap}
 .cat.preset{border-style:dashed}
 .peek{border:1px dashed var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
 .peek .lbl{font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
@@ -206,6 +207,9 @@ async function poll() {
   try {
     const s = await api('/api/status');
     $('#dot').className = 'dot ' + (s.connected ? 'on' : 'off');
+    // Al conectarse con Pro Tools, traer las carpetas de la sesión
+    if (s.connected && !wasConnected) loadLayout(true);
+    wasConnected = !!s.connected;
     $('#session').textContent = s.connected ? s.session + (s.mock ? '  ·  MOCK' : '') : s.error;
     if (s.connected && s.session !== sessionName) { const first = !sessionName; sessionName = s.session; seen = null; if (!first) loadLayout(true); }
   } catch { $('#dot').className = 'dot off'; $('#session').textContent = 'sin conexión con la Mac'; }
@@ -213,7 +217,7 @@ async function poll() {
 
 /* ---------- parte 1: botonera ---------- */
 // Pestañas: una por carpeta de la sesión (Surfaces, Footsteps, Props…) + las de presets.json
-let layout = {tabs: []}, tabKey = null;
+let layout = {tabs: []}, tabKey = null, wasConnected = false, layoutErr = '';
 const ls = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -229,8 +233,8 @@ function tcolor(c) {
   return /^[0-9a-f]{6}$/i.test(h) ? '#' + h : '';
 }
 async function loadLayout(quiet) {
-  try { layout = await api('/api/layout'); }
-  catch (e) { layout = {tabs: []}; if (!quiet) toast(e.message, true); }
+  try { layout = await api('/api/layout'); layoutErr = ''; }
+  catch (e) { layout = {tabs: []}; layoutErr = e.message; if (!quiet) toast(e.message, true); }
   const tabs = allTabs();
   if (!tabs.find(t => t.key === tabKey)) tabKey = ls.get('spotpad.tab', null);
   if (!tabs.find(t => t.key === tabKey)) tabKey = tabs[0] && tabs[0].key;
@@ -238,6 +242,11 @@ async function loadLayout(quiet) {
 }
 function renderCats() {
   const c = $('#cats'); c.innerHTML = '';
+  if (!layout.tabs.length) {
+    const n = document.createElement('span'); n.className = 'cathint';
+    n.textContent = layoutErr ? 'Carpetas de la sesión: sin conexión con Pro Tools' : 'No hay carpetas con tracks en la sesión';
+    c.append(n);
+  }
   allTabs().forEach(t => {
     const b = document.createElement('button');
     b.className = 'cat ' + t.kind + (t.key === tabKey ? ' sel' : ''); b.textContent = t.label;

@@ -22,7 +22,7 @@ import webbrowser
 import bridge
 from bridge import DATA, DIAG_FILE, MockProTools, ProTools, ipad_url, start_server
 
-APP_VERSION = "0.3.1"
+APP_VERSION = "0.3.2"
 log = logging.getLogger("spotpad")
 
 
