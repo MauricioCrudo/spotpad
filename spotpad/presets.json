@@ -6,15 +6,15 @@
       "label": "Manos",
       "color": "#E8A33D",
       "items": [
-        "Hands body",
-        "Hands skin",
-        "Hands clap",
-        "Hands punch",
-        "Hands grab body",
-        "Hands surface wood",
-        "Hands surface metal",
-        "Hands surface marble",
-        "Hands surface concrete"
+        {"name": "Hands body", "track": "Hands Body"},
+        {"name": "Hands skin", "track": "Hands Body"},
+        {"name": "Hands clap", "track": "Hands Body"},
+        {"name": "Hands punch", "track": "Hands Body"},
+        {"name": "Hands grab body", "track": "Hands Body"},
+        {"name": "Hands surface wood", "track": "Hands Surfaces"},
+        {"name": "Hands surface metal", "track": "Hands Surfaces"},
+        {"name": "Hands surface marble", "track": "Hands Surfaces"},
+        {"name": "Hands surface concrete", "track": "Hands Surfaces"}
       ]
     }
   ]

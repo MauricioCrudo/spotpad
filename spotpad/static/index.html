@@ -75,6 +75,20 @@ h2 b{color:var(--accent);font-weight:600}
 .cat.folder{border-style:solid}
 .cathint{align-self:center;color:var(--dim);font-size:13px;padding:0 4px;white-space:nowrap}
 .cat.preset{border-style:dashed}
+.pad .dest{font:500 11px ui-monospace,Menlo,monospace;color:var(--dim);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pad .dest.miss{color:#ffb4ac}
+body.editing .pad{outline:1.5px dashed var(--accent);outline-offset:-4px}
+.pad.add{border-style:dashed;color:var(--dim);align-items:center;justify-content:center;font-size:15px}
+#editBtn.on{background:var(--accent);color:#121214;border-color:var(--accent)}
+.cat.add{border-style:dashed;color:var(--dim)}
+.ef{padding:14px 16px;display:grid;gap:12px}
+.ef label{display:grid;gap:6px;font-size:13px;color:var(--dim)}
+.ef input,.ef select{background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);
+  font:inherit;font-size:16px;padding:10px 12px;-webkit-user-select:text;user-select:text;width:100%}
+.ef input[type=color]{padding:2px;height:42px}
+.ebtns{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.ebtns .hbtn{flex:1}
+.hbtn.danger{color:#ffb4ac;border-color:#5a2a26}
 .peek{border:1px dashed var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
 .peek .lbl{font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
 .peek .name{font-size:18px;font-weight:600;margin-top:4px;min-height:22px}
@@ -165,7 +179,7 @@ body.offline #reconBtn{display:inline-block}
 
 <main id="viewPads">
   <section>
-    <h2><span>Spotting · marcá la región y tocá</span><button class="hbtn" id="reload">↻ Tracks</button></h2>
+    <h2><span>Spotting · marcá la región y tocá</span><span style="display:flex;gap:8px"><button class="hbtn" id="editBtn">✎ Editar</button><button class="hbtn" id="reload">↻ Tracks</button></span></h2>
     <div class="cats" id="cats"></div>
     <div class="namebar" id="namebar"><input id="clipName" placeholder="Nombre del clip (vacío = nombre del track)" autocomplete="off" autocapitalize="words"><button class="hbtn" id="clearName">×</button></div>
     <div class="recents" id="recents"></div>
@@ -199,6 +213,25 @@ body.offline #reconBtn{display:inline-block}
 <dialog id="dlg">
   <div class="dhead"><b id="dlgTitle">Tracks destino</b><button class="hbtn" id="done">Listo</button></div>
   <div class="dlist" id="dlist"></div>
+</dialog>
+
+<dialog id="edItem">
+  <div class="dhead"><b id="edItemTitle">Botón</b><button class="hbtn" id="edItemCancel">Cancelar</button></div>
+  <div class="ef">
+    <label>Nombre del clip group<input id="edName" autocomplete="off" autocapitalize="words" placeholder="Hands surface wood"></label>
+    <label>Track destino<select id="edTrack"></select></label>
+  </div>
+  <div class="ebtns"><button class="hbtn danger" id="edDelete">Borrar</button><button class="hbtn" id="edSave">Guardar</button></div>
+</dialog>
+
+<dialog id="edCat">
+  <div class="dhead"><b id="edCatTitle">Categoría</b><button class="hbtn" id="edCatCancel">Cancelar</button></div>
+  <div class="ef">
+    <label>Nombre de la pestaña<input id="ecLabel" autocomplete="off" autocapitalize="words" placeholder="Sillas"></label>
+    <label>Color<input id="ecColor" type="color" value="#E8A33D"></label>
+    <label>Track destino por defecto (para botones sin track propio)<select id="ecTrack"></select></label>
+  </div>
+  <div class="ebtns"><button class="hbtn danger" id="ecDelete">Borrar categoría</button><button class="hbtn" id="ecSave">Guardar</button></div>
 </dialog>
 
 <dialog id="stat">
@@ -315,6 +348,10 @@ function renderCats() {
     b.onclick = () => { tabKey = t.key; ls.set('spotpad.tab', tabKey); $('#clipName').value = ''; renderCats(); renderGrid(); loadLayout(true); };
     c.append(b);
   });
+  if (editing) {
+    const a = document.createElement('button'); a.className = 'cat add'; a.textContent = '+ Categoría';
+    a.onclick = () => openCat(null); c.append(a);
+  }
 }
 function renderGrid() {
   const w = $('#gwrap'), t = allTabs().find(t => t.key === tabKey); w.innerHTML = '';
@@ -359,26 +396,138 @@ function renderRecents() {
 $('#clearName').onclick = () => { $('#clipName').value = ''; $('#clipName').blur(); };
 $('#reload').onclick = async () => { await loadLayout(); buzz(true); };
 
+/* ---------- botones preseteados (con track destino) + editor ---------- */
+let editing = false;
+const iName = it => (typeof it === 'string' ? it : (it.name || '')).trim();
+const iTrack = (it, cat) => ((typeof it === 'object' && it.track) || (cat && cat.track) || '').trim();
+const sessionTracks = () => layout.tabs.flatMap(t => t.groups.flatMap(g => g.tracks.map(tr => ({tab: t.name, name: tr.name}))));
+const hasTrack = n => sessionTracks().some(t => t.name.trim().toLowerCase() === n.trim().toLowerCase());
+
 function renderPresetGrid(w, cat) {
   const g = document.createElement('div'); g.className = 'grid'; w.append(g);
-  cat.items.forEach((name, i) => {
+  cat.items.forEach((it, i) => {
+    const name = iName(it), track = iTrack(it, cat);
     const b = document.createElement('button');
     b.className = 'pad'; b.style.setProperty('--cc', cat.color);
     const parts = name.split(' '), head = parts.shift();
-    b.innerHTML = `<span class="k">${i + 1}</span><span><div class="sub"></div><div class="lab"></div></span>`;
+    b.innerHTML = `<span class="k">${i + 1}</span><span><div class="sub"></div><div class="lab"></div><div class="dest"></div></span>`;
     b.querySelector('.sub').textContent = head;
     b.querySelector('.lab').textContent = parts.join(' ') || head;
+    const d = b.querySelector('.dest');
+    d.textContent = track ? '→ ' + track : '→ track seleccionado';
+    if (track && layout.tabs.length && !hasTrack(track)) { d.classList.add('miss'); d.textContent = '→ ' + track + ' (no está)'; }
     b.onclick = async () => {
+      if (editing) return openItem(cat, i);
       if (b.classList.contains('busy')) return;
       b.classList.add('busy');
-      try { const r = await api('/api/group', {method: 'POST', body: JSON.stringify({name})});
+      try { const r = await api('/api/group', {method: 'POST', body: JSON.stringify({name, track})});
             flash(b, true); toast(r.msg); }
       catch (e) { flash(b, false); toast(e.message, true); }
       b.classList.remove('busy');
     };
     g.append(b);
   });
+  if (editing) {
+    const add = document.createElement('button'); add.className = 'pad add'; add.textContent = '+ Botón';
+    add.onclick = () => openItem(cat, -1); g.append(add);
+    const ed = document.createElement('button'); ed.className = 'pad add'; ed.textContent = '✎ Categoría';
+    ed.onclick = () => openCat(cat); g.append(ed);
+  }
 }
+
+function fillTrackSelect(sel, current, emptyLabel) {
+  sel.innerHTML = '';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = emptyLabel; sel.append(o0);
+  if (current && !hasTrack(current)) {
+    const o = document.createElement('option'); o.value = current; o.textContent = current + ' (no está en esta sesión)'; sel.append(o);
+  }
+  layout.tabs.forEach(t => {
+    const og = document.createElement('optgroup'); og.label = t.name;
+    t.groups.forEach(g => g.tracks.forEach(tr => {
+      const o = document.createElement('option'); o.value = tr.name; o.textContent = (g.name ? g.name + ' › ' : '') + tr.name; og.append(o);
+    }));
+    sel.append(og);
+  });
+  sel.value = current || '';
+  if (sel.value !== (current || '')) {   // nombre con otra mayúscula/espacios
+    const m = [...sel.options].find(o => o.value.trim().toLowerCase() === (current || '').trim().toLowerCase());
+    if (m) sel.value = m.value;
+  }
+}
+async function savePresets(msg) {
+  try {
+    const r = await api('/api/presets', {method: 'PUT', body: JSON.stringify({categories: presets})});
+    presets = r.categories || []; toast(msg || 'Guardado'); buzz(true);
+  } catch (e) { toast(e.message, true); presets = (await api('/api/presets')).categories || []; }
+  renderCats(); renderGrid();
+}
+let edCtx = null;
+function openItem(cat, i) {
+  edCtx = {cat, i};
+  const it = i >= 0 ? cat.items[i] : '';
+  $('#edItemTitle').textContent = i >= 0 ? 'Editar botón' : 'Nuevo botón en ' + cat.label;
+  $('#edName').value = i >= 0 ? iName(it) : '';
+  fillTrackSelect($('#edTrack'), i >= 0 ? ((typeof it === 'object' && it.track) || '') : '',
+                  cat.track ? `(el de la categoría: ${cat.track})` : '(el track que esté seleccionado)');
+  $('#edDelete').style.display = i >= 0 ? '' : 'none';
+  $('#edItem').showModal();
+}
+$('#edItemCancel').onclick = () => $('#edItem').close();
+$('#edSave').onclick = () => {
+  const name = $('#edName').value.trim(), track = $('#edTrack').value.trim();
+  if (!name) return toast('Poné un nombre', true);
+  const item = track ? {name, track} : name;
+  const {cat, i} = edCtx;
+  if (i >= 0) cat.items[i] = item; else cat.items.push(item);
+  $('#edItem').close(); savePresets('Botón guardado');
+};
+$('#edDelete').onclick = () => {
+  const {cat, i} = edCtx;
+  if (!confirmTap($('#edDelete'))) return;
+  cat.items.splice(i, 1); $('#edItem').close(); savePresets('Botón borrado');
+};
+// Borrar pide un segundo toque (sin diálogos del sistema)
+function confirmTap(btn) {
+  if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.txt; return true; }
+  btn.dataset.txt = btn.textContent; btn.dataset.armed = 1; btn.textContent = '¿Seguro? Tocá de nuevo';
+  setTimeout(() => { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.txt; } }, 3000);
+  return false;
+}
+function openCat(cat) {
+  edCtx = {cat};
+  $('#edCatTitle').textContent = cat ? 'Editar categoría' : 'Nueva categoría';
+  $('#ecLabel').value = cat ? cat.label : '';
+  $('#ecColor').value = (cat && /^#[0-9a-f]{6}$/i.test(cat.color)) ? cat.color : '#E8A33D';
+  fillTrackSelect($('#ecTrack'), cat ? (cat.track || '') : '', '(ninguno: el track que esté seleccionado)');
+  $('#ecDelete').style.display = cat ? '' : 'none';
+  $('#edCat').showModal();
+}
+$('#edCatCancel').onclick = () => $('#edCat').close();
+$('#ecSave').onclick = () => {
+  const label = $('#ecLabel').value.trim(); if (!label) return toast('Poné un nombre', true);
+  let cat = edCtx.cat;
+  if (!cat) {
+    const base = label.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cat';
+    let id = base, k = 2; while (presets.some(p => p.id === id)) id = base + '-' + k++;
+    cat = {id, label, color: $('#ecColor').value, items: []}; presets.push(cat);
+    tabKey = 'p:' + id; ls.set('spotpad.tab', tabKey);
+  }
+  cat.label = label; cat.color = $('#ecColor').value;
+  const t = $('#ecTrack').value.trim(); if (t) cat.track = t; else delete cat.track;
+  $('#edCat').close(); savePresets('Categoría guardada');
+};
+$('#ecDelete').onclick = () => {
+  if (!confirmTap($('#ecDelete'))) return;
+  presets = presets.filter(p => p !== edCtx.cat); tabKey = null;
+  $('#edCat').close(); savePresets('Categoría borrada');
+};
+$('#editBtn').onclick = () => {
+  editing = !editing; document.body.classList.toggle('editing', editing);
+  $('#editBtn').classList.toggle('on', editing); $('#editBtn').textContent = editing ? '✓ Listo' : '✎ Editar';
+  if (editing && !layout.tabs.length) loadLayout(true);
+  renderCats(); renderGrid();
+};
+
 function flash(el, ok) {
   buzz(ok); const c = ok ? 'flash-ok' : 'flash-err';
   el.classList.add(c); setTimeout(() => el.classList.remove(c), 450);

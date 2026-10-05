@@ -27,7 +27,7 @@ from aiohttp import web
 from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 
-VERSION = "0.3.6"
+VERSION = "0.4.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -59,6 +59,66 @@ STATE_FILE = DATA / "state.json"       # prefijo activo (Prps / Fts)
 SPOT_TRACKS_FILE = DATA / "spot_tracks.json"   # tracks que muestra la lista de spotting (por ID)
 DIAG_FILE = DATA / "diag.txt"
 LOG_FILE = DATA / "spotpad.log"
+
+
+# ---- Presets: cada botón puede tener un track destino ------------------------ #
+#   item: "Hands clap"  ó  {"name": "Hands clap", "track": "Hands Body"}
+#   categoría: "track" opcional = destino por defecto de sus botones
+def item_name(item) -> str:
+    return (item.get("name", "") if isinstance(item, dict) else str(item)).strip()
+
+
+def item_track(item, cat=None) -> str:
+    t = item.get("track", "") if isinstance(item, dict) else ""
+    return (t or (cat or {}).get("track", "") or "").strip()
+
+
+def migrate_presets():
+    """Las instalaciones viejas tienen Manos sin track asignado: les sumamos el destino
+    por defecto (Hands Body / Hands Surfaces) sin tocar nada que hayan editado."""
+    try:
+        user = json.loads(PRESETS_FILE.read_text("utf-8"))
+        default = json.loads((RES / "presets.json").read_text("utf-8"))
+    except Exception:
+        return
+    dflt = {c["id"]: {item_name(i): item_track(i) for i in c.get("items", [])} for c in default.get("categories", [])}
+    changed = False
+    for cat in user.get("categories", []):
+        tracks = dflt.get(cat.get("id"), {})
+        if not tracks or any(isinstance(i, dict) for i in cat.get("items", [])):
+            continue
+        new = [{"name": item_name(i), "track": tracks[item_name(i)]} if tracks.get(item_name(i)) else i
+               for i in cat.get("items", [])]
+        if new != cat.get("items"):
+            cat["items"], changed = new, True
+    if changed:
+        PRESETS_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
+
+
+def clean_presets(data) -> dict:
+    """Valida lo que manda el editor del iPad antes de guardarlo."""
+    cats = []
+    for i, c in enumerate(data.get("categories", [])):
+        label = str(c.get("label", "")).strip()
+        if not label:
+            continue
+        items = []
+        for it in c.get("items", []):
+            n, t = item_name(it), item_track(it)
+            if n:
+                items.append({"name": n, "track": t} if t else n)
+        cid = str(c.get("id") or "").strip() or f"cat{i + 1}"
+        cat = {"id": cid, "label": label, "color": str(c.get("color") or "#E8A33D"), "items": items}
+        if str(c.get("track", "")).strip():
+            cat["track"] = str(c["track"]).strip()
+        cats.append(cat)
+    ids = [c["id"] for c in cats]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Hay dos categorías con el mismo id")
+    return {"categories": cats}
+
+
+migrate_presets()
 
 
 def setup_logging(debug=False, console=True):
@@ -364,40 +424,53 @@ class ProTools:
 
     def group_on_track(self, track_id: str, name: str = ""):
         """Crea el clip group en el track del botón, con el rango marcado en cualquier track."""
-        from ptsl import PTSL_pb2 as pt
-
         def f(e):
             target = next((t for t in e.track_list() if t.id == track_id), None)
             if target is None:
                 raise SpotError("Ese track ya no existe en la sesión")
-            sel_in, sel_out = self._selection_samples(e)
-            if sel_out <= sel_in:
-                raise SpotError("Marcá una región primero")
-            log.info("group-on: rango %s-%s → seleccionar track «%s»", sel_in, sel_out, target.name)
-            e.select_tracks_by_name([target.name])
-            # Con «Link Track and Edit Selection» el rango ya pasa solo al track nuevo.
-            # Si no, lo re-aplicamos; y antes de agrupar verificamos que quedó igual.
-            if self._selection_samples(e) != (sel_in, sel_out):
-                log.info("group-on: re-aplicar selección")
-                e.set_timeline_selection(in_time=str(sel_in), out_time=str(sel_out),
-                                         location_type=pt.TLType_Samples)
-                got = self._selection_samples(e)
-                if got != (sel_in, sel_out):
-                    log.warning("group-on: la selección quedó en %s (esperaba %s-%s)", got, sel_in, sel_out)
-                    raise SpotError(f"No pude pasar la selección al track «{target.name}». "
-                                    "Activá Options → Link Track and Edit Selection y probá de nuevo.")
-            log.info("group-on: GroupClips")
-            try:
-                e.group_clips()
-            except Exception as ex:
-                if "Unknown" in str(ex) or "not supported" in str(ex).lower():
-                    raise SpotError("Tu Pro Tools no tiene GroupClips en el SDK: hace falta 2024.6 o posterior")
-                raise
-            clip = (name or target.name).strip()
-            log.info("group-on: renombrar a «%s»", clip)
-            e.rename_selected_clip(new_name=clip, rename_file=False, clip_location=pt.CL_Timeline)
-            return {"ok": True, "msg": f"«{clip}» en {target.name}"}
+            return self._group_on(e, target, name)
         return self._call(f)
+
+    def group_on_named(self, track_name: str, name: str = ""):
+        """Igual, pero el track se busca por nombre (botones preseteados con track asignado)."""
+        def f(e):
+            want = track_name.strip().lower()
+            target = next((t for t in e.track_list() if t.name.strip().lower() == want), None)
+            if target is None:
+                raise SpotError(f"No hay un track «{track_name}» en esta sesión. "
+                                "Cambiá el destino del botón con ✎ Editar.")
+            return self._group_on(e, target, name)
+        return self._call(f)
+
+    def _group_on(self, e, target, name: str = ""):
+        from ptsl import PTSL_pb2 as pt
+        sel_in, sel_out = self._selection_samples(e)
+        if sel_out <= sel_in:
+            raise SpotError("Marcá una región primero")
+        log.info("group-on: rango %s-%s → seleccionar track «%s»", sel_in, sel_out, target.name)
+        e.select_tracks_by_name([target.name])
+        # Con «Link Track and Edit Selection» el rango ya pasa solo al track nuevo.
+        # Si no, lo re-aplicamos; y antes de agrupar verificamos que quedó igual.
+        if self._selection_samples(e) != (sel_in, sel_out):
+            log.info("group-on: re-aplicar selección")
+            e.set_timeline_selection(in_time=str(sel_in), out_time=str(sel_out),
+                                     location_type=pt.TLType_Samples)
+            got = self._selection_samples(e)
+            if got != (sel_in, sel_out):
+                log.warning("group-on: la selección quedó en %s (esperaba %s-%s)", got, sel_in, sel_out)
+                raise SpotError(f"No pude pasar la selección al track «{target.name}». "
+                                "Activá Options → Link Track and Edit Selection y probá de nuevo.")
+        log.info("group-on: GroupClips")
+        try:
+            e.group_clips()
+        except Exception as ex:
+            if "Unknown" in str(ex) or "not supported" in str(ex).lower():
+                raise SpotError("Tu Pro Tools no tiene GroupClips en el SDK: hace falta 2024.6 o posterior")
+            raise
+        clip = (name or target.name).strip()
+        log.info("group-on: renombrar a «%s»", clip)
+        e.rename_selected_clip(new_name=clip, rename_file=False, clip_location=pt.CL_Timeline)
+        return {"ok": True, "msg": f"«{clip}» en {target.name}"}
 
     def diag(self):
         """Lo que hace falta ver de tu sesión real, en texto para pegar."""
@@ -619,12 +692,19 @@ class MockProTools:
              [F(30, "Footsteps"), T(31, "Henry", 30, "#3E9B4F"), T(32, "Sonia", 30, "#C9567A"),
               T(33, "Male Shoes", 30, "#3E9B4F"), T(34, "Femme Shoes", 30, "#C9567A"), T(35, "Sneakers", 30, "#3B7DD8"),
               T(36, "Boots", 30, "#8A5A2B"), T(37, "Barefoot", 30), T(38, "Group", 30)] + \
-             [F(50, "Props"), F(51, "Hands", ), T(52, "Hands Body", 51), T(53, "Hands Surface", 51)] + \
+             [F(50, "Props"), F(51, "Hands", ), T(52, "Hands Body", 51), T(53, "Hands Surfaces", 51)] + \
              [T(54 + k, n, 50) for k, n in enumerate(
                   ["Movements", "Chairs", "Bags", "Bijou", "Cell Phones", "Glass Bottles", "Keyboards",
                    "Papers", "Tableware", "Props 1", "Props 2"])]
         tr[[t["id"] for t in tr].index("f51")]["parent_id"] = "f50"
         return build_layout(tr, exclude)
+
+    def group_on_named(self, track_name, name=""):
+        t = next((t for g in self.layout()["tabs"] for gr in g["groups"] for t in gr["tracks"]
+                  if t["name"].lower() == track_name.strip().lower()), None)
+        if not t:
+            raise SpotError(f"No hay un track «{track_name}» en esta sesión. Cambiá el destino del botón con ✎ Editar.")
+        return self.group_on_track(t["id"], name)
 
     def group_on_track(self, track_id, name=""):
         t = next((t for g in self.layout()["tabs"] for gr in g["groups"] for t in gr["tracks"] if t["id"] == track_id), None)
@@ -703,12 +783,29 @@ def make_app(pt):
     async def presets(_):
         return web.json_response(load_json(PRESETS_FILE, {"categories": []}))
 
+    # El editor del iPad guarda acá las categorías (botones, nombres, tracks destino)
+    @routes.put("/api/presets")
+    async def put_presets(req):
+        try:
+            clean = clean_presets(await req.json())
+        except (ValueError, AttributeError, TypeError) as e:
+            return web.json_response({"ok": False, "error": f"No se pudo guardar: {e}"}, status=400)
+        data = load_json(PRESETS_FILE, {})
+        data["categories"] = clean["categories"]
+        PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
+        log.info("Presets guardados desde el iPad (%s categorías)", len(clean["categories"]))
+        return web.json_response(data)
+
+    # Botón preseteado: con track destino → ahí; sin track → donde esté la selección
     @routes.post("/api/group")
     async def group(req):
         body = await req.json()
         name = str(body.get("name", "")).strip()
+        track = str(body.get("track", "") or "").strip()
         if not name:
             return web.json_response({"ok": False, "error": "Falta el nombre"}, status=400)
+        if track:
+            return await run(pt.group_on_named, track, name)
         return await run(pt.group_and_name, name)
 
     # Atajo para teclado/Stream Deck: /api/group/hands/3 → 3er botón de "hands"
@@ -717,10 +814,12 @@ def make_app(pt):
         cats = load_json(PRESETS_FILE, {"categories": []})["categories"]
         cat = next((c for c in cats if c["id"] == req.match_info["cat"]), None)
         try:
-            name = cat["items"][int(req.match_info["n"]) - 1]
+            item = cat["items"][int(req.match_info["n"]) - 1]
         except (TypeError, IndexError, ValueError):
             return web.json_response({"ok": False, "error": "Botón inexistente"}, status=404)
-        return await run(pt.group_and_name, name)
+        if item_track(item, cat):
+            return await run(pt.group_on_named, item_track(item, cat), item_name(item))
+        return await run(pt.group_and_name, item_name(item))
 
     @routes.get("/api/peek")
     async def peek(_):

@@ -62,6 +62,17 @@ python3 bridge.py --diag
 ```
 Imprime la sesión, el timecode, la selección, **todos los tracks con su carpeta y color**, cómo quedaría la botonera y las primeras líneas del export de EDL. Lo guarda también en `diag.txt`. Antes de correrlo, marcá una región sobre algún clip group y seleccioná ese track, así el export muestra algo.
 
+## Categorías de genéricos (botones preseteados)
+Pestañas con borde punteado (p. ej. *Manos*). Cada botón crea un clip group con su nombre **en su track destino**: *Hands clap* → track **Hands Body**, *Hands surface wood* → **Hands Surfaces**. Si un botón no tiene track, lo crea en el track que esté seleccionado. Abajo de cada botón se ve a dónde va (en rojo si ese track no existe en la sesión abierta).
+
+**✎ Editar** (arriba de la botonera) pasa a modo edición:
+- Tocar un botón → cambiar nombre, track destino o borrarlo.
+- **+ Botón** agrega uno a la categoría; **✎ Categoría** cambia nombre, color y el track por defecto de sus botones.
+- **+ Categoría** (al final de las pestañas) crea una nueva.
+- **✓ Listo** vuelve al modo normal. Todo se guarda en `presets.json` (carpeta de datos).
+
+Los tracks destino se guardan por **nombre**, así sirven para cualquier sesión que tenga un track con ese nombre.
+
 ## Tracks destino
 "Elegir tracks" → marcás los tracks que vas a renombrar. Se guardan por **ID de track** (en `targets.json`), así siguen funcionando después de cambiarles el nombre.
 
