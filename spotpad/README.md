@@ -88,6 +88,25 @@ Arriba a la derecha, **Lista** muestra todos los clips de los tracks de spotting
 - «Tracks de spotting» elige qué tracks se leen. **Solo esos**: los clips grabados en otros tracks no aparecen ni cuentan como nuevos. Si no elegiste ninguno, la lista queda vacía (nunca toma toda la sesión). Se guardan por ID de track en `spot_tracks.json`, así que renombrar un track no los desarma.
 - El TC se calcula con el inicio de sesión, el frame rate (incluye 23.976 y drop frame) y la frecuencia de muestreo que da el SDK.
 
+## Modo grabación (pestaña «Grabar»)
+Para el grabador: barre el spotting clip por clip y deja el track de grabación nombrado solo.
+
+1. **Leer sesión** y elegir **qué barrer**: uno o más tracks de las carpetas de pasos, props o superficies (p. ej. *SNEAKERS 01* + *KYLE*, o *Chairs*). Opcional: **solo pasos sobre la superficie** X.
+2. Elegir el **track de grabación** (el que recibe el input del micrófono). Con «Renombrar el track al ir» activado, cada vez que vas a un clip ese track toma el nombre sugerido.
+3. **Siguiente ▶ / ◀ Anterior** recorren los pendientes en orden de tiempo: posicionan Pro Tools en el clip y renombran. **⟳ Ir** repite. Tocar un clip de la lista va directo.
+4. **Pendiente** = no muteado en Pro Tools y no marcado. Podés mutear el clip de spotting como siempre (Cmd+M; se ve al tocar «Leer sesión») o tocar **✓ Grabado**, que lo marca en SpotPad y pasa al siguiente.
+
+**Nombres sugeridos** (tocá el nombre para editarlo; la edición queda guardada para ese clip):
+- Props: `Prps` + nombre del clip group → *Prps Chair sit*.
+- Pasos: `Fts` + personaje + calzado + superficie → *Fts Kyle Sneakers Hardwood*.
+  - Track de **personaje** (KYLE, JUNE): el calzado sale del nombre del clip si lo trae (*Kyle Barefoot*), si no del fijado para ese personaje, si no del **color del track** (el mismo color que el track de calzado: celeste = SNEAKERS). *EMILY HEELS* = Emily con Heels.
+  - Track de **calzado** (SNEAKERS 01, Varios FEM Shoes 04): el personaje es el nombre del clip group (*Extra Left*, *Sonia*); si el clip se llama como el track, va sin personaje.
+  - **Superficie**: el clip de la carpeta de superficies que está debajo del paso. Si hay dos (**choque**), aparecen dos botones grandes para elegir; queda guardado.
+  - Si no se puede deducir el calzado, lo pregunta una vez y lo recuerda para ese personaje.
+- **⚙ Reglas de pasos**: cómo se interpretó cada track, calzado fijo por personaje y nombre corto de cada superficie (*Gritty Concrete Street* → *Gritty*). Se guardan en `footsteps.json`.
+
+Las carpetas se reconocen por nombre: superficies (*SUPERFICIES/SURFACES*), pasos (*FTS/FOOTSTEPS*), props (*PRPS/PROPS*).
+
 ## Atajos de teclado / Stream Deck
 Cualquier app que dispare un comando (Keyboard Maestro, BetterTouchTool, Stream Deck) puede llamar al bridge:
 ```bash

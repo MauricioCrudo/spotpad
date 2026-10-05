@@ -17,6 +17,7 @@ class EdlEvent:
     clip: str
     start: int
     end: int
+    muted: bool = False
 
 
 def _cols(line: str) -> List[str]:
@@ -53,7 +54,8 @@ def parse_session_text(text: str) -> Dict[str, List[EdlEvent]]:
         except (KeyError, ValueError):
             # Línea que no es evento (o export no hecho en samples)
             continue
-        tracks[current].append(EdlEvent(current, row.get("CLIP NAME", ""), start, end))
+        muted = row.get("STATE", "").strip().lower() == "muted"
+        tracks[current].append(EdlEvent(current, row.get("CLIP NAME", ""), start, end, muted))
     return tracks
 
 

@@ -166,6 +166,57 @@ body.offline #reconBtn{display:inline-block}
 .sbtns{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
 .sbtns .hbtn{flex:1}
 
+/* ----- vista Grabar ----- */
+#viewRec{display:none;padding:0 16px 16px;gap:14px;height:calc(100% - 60px)}
+body.rec #viewPads, body.rec #viewList{display:none}
+body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
+@media (max-width:820px){body.rec #viewRec{grid-template-columns:1fr;height:auto}}
+.rs{display:grid;gap:12px;overflow:auto;align-content:start}
+.rs .lbl2{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.rs select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:15px;padding:9px 10px}
+.swp{display:flex;flex-wrap:wrap;gap:6px}
+.swp .chip{border-left:4px solid var(--tc,var(--line))}
+.swp .chip.on{background:var(--accent);color:#121214;border-color:var(--accent);border-left-color:var(--tc,var(--accent))}
+.swp .chip .n{opacity:.7;margin-left:4px;font:11px ui-monospace,Menlo,monospace}
+.sgh{font-size:11px;color:var(--dim);margin:8px 0 4px}
+.tog{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text)}
+.tog input{width:20px;height:20px;accent-color:var(--accent)}
+.rmain{display:flex;flex-direction:column;min-height:0;gap:12px}
+.prog{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--dim)}
+.prog .bar{flex:1;height:6px;background:var(--panel2);border-radius:3px;overflow:hidden}
+.prog .bar i{display:block;height:100%;background:var(--ok)}
+.card{border:1px solid var(--line);border-radius:18px;background:var(--panel2);padding:18px;display:grid;gap:10px}
+.card .tcs{font:600 22px ui-monospace,"SF Mono",Menlo,monospace}
+.card .tcs small{font-size:14px;color:var(--dim);font-weight:400;margin-left:8px}
+.card .src{font-size:13px;color:var(--dim)}
+.card .nm{font-size:28px;font-weight:700;line-height:1.15;word-break:break-word;cursor:text}
+.card .nm.auto::after{content:"auto";font:600 10px ui-monospace,Menlo,monospace;color:#121214;background:var(--dim);border-radius:4px;padding:2px 5px;margin-left:8px;vertical-align:6px}
+.card .nm.editado::after{content:"editado";font:600 10px ui-monospace,Menlo,monospace;color:#121214;background:var(--accent);border-radius:4px;padding:2px 5px;margin-left:8px;vertical-align:6px}
+.card input.nmi{font-size:24px;font-weight:700;background:var(--bg);border:1px solid var(--accent);border-radius:10px;color:var(--text);padding:8px 10px;width:100%;-webkit-user-select:text;user-select:text}
+.card .hint{font-size:12px;color:var(--dim)}
+.need{border:1px solid var(--accent);border-radius:12px;padding:10px;display:grid;gap:8px}
+.need b{font-size:13px;color:var(--accent)}
+.need .opts{display:flex;flex-wrap:wrap;gap:8px}
+.need .opts button{flex:1 1 140px;min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;font-weight:600;font-size:16px}
+.need .opts button:active{background:var(--line)}
+.ctl{display:grid;grid-template-columns:1fr 1fr 1.2fr 1.6fr;gap:10px}
+.ctl button{min-height:64px;border-radius:14px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit;font-weight:700;font-size:17px}
+.ctl button:active{transform:scale(.98)}
+.ctl .next{background:var(--accent);color:#121214;border-color:var(--accent)}
+.ctl .done.on{background:color-mix(in srgb,var(--ok) 35%,var(--panel2));border-color:var(--ok)}
+.queue{overflow:auto;flex:1;min-height:120px;border-top:1px solid var(--line)}
+.qi{display:grid;grid-template-columns:104px 1fr auto;gap:2px 12px;padding:8px 6px;border-bottom:1px solid var(--line);font-size:14px;align-items:center}
+.qi .t{font:13px ui-monospace,Menlo,monospace;color:var(--dim)}
+.qi .q{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qi .w{font:600 11px ui-monospace,Menlo,monospace;color:var(--accent)}
+.qi.cur{background:color-mix(in srgb,var(--accent) 16%,transparent);border-left:3px solid var(--accent)}
+.qi.gone{opacity:.4;text-decoration:line-through}
+.rempty{color:var(--dim);padding:20px 4px;font-size:15px;line-height:1.5}
+.rules table{width:100%;border-collapse:collapse;font-size:14px}
+.rules td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.rules select,.rules input{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:6px;width:100%;-webkit-user-select:text;user-select:text}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
   background:var(--panel2);border:1px solid var(--line);padding:12px 18px;border-radius:12px;opacity:0;
   transition:.2s;max-width:90vw;font-size:15px;pointer-events:none}
@@ -181,7 +232,7 @@ body.offline #reconBtn{display:inline-block}
     <span id="session" class="mono">conectando…</span>
   </button>
   <button class="hbtn" id="reconBtn">↻ Reconectar</button>
-  <div class="views"><button id="vPads" class="sel">Botonera</button><button id="vList">Lista<span class="badge" id="newCount"></span></button></div>
+  <div class="views"><button id="vPads" class="sel">Botonera</button><button id="vList">Lista<span class="badge" id="newCount"></span></button><button id="vRec">Grabar</button></div>
   <button class="hbtn" id="undo">↶ Deshacer</button>
 </header>
 
@@ -221,6 +272,34 @@ body.offline #reconBtn{display:inline-block}
 <dialog id="dlg">
   <div class="dhead"><b id="dlgTitle">Tracks destino</b><button class="hbtn" id="done">Listo</button></div>
   <div class="dlist" id="dlist"></div>
+</dialog>
+
+<div id="viewRec">
+  <section class="rs">
+    <div><div class="lbl2">Qué barrer</div><div class="swp" id="recSweep"></div></div>
+    <div><div class="lbl2">Solo pasos sobre la superficie</div><select id="recSurf"></select></div>
+    <div><div class="lbl2">Track de grabación (se renombra solo)</div><select id="recTrack"></select></div>
+    <label class="tog"><input type="checkbox" id="recAuto"> Renombrar el track al ir a cada clip</label>
+    <label class="tog"><input type="checkbox" id="recShowDone"> Mostrar también los ya grabados</label>
+    <div style="display:flex;gap:8px"><button class="hbtn" id="recRefresh" style="flex:1">↻ Leer sesión</button><button class="hbtn" id="recRulesBtn">⚙ Reglas de pasos</button></div>
+    <div class="hint" id="recAt" style="font-size:12px;color:var(--dim)"></div>
+  </section>
+  <section class="rmain">
+    <div class="prog"><span id="recProg">—</span><span class="bar"><i id="recBar" style="width:0"></i></span></div>
+    <div id="recCard"></div>
+    <div class="ctl">
+      <button id="recPrev">◀ Anterior</button>
+      <button id="recGo">⟳ Ir</button>
+      <button id="recDone" class="done">✓ Grabado</button>
+      <button id="recNext" class="next">Siguiente ▶</button>
+    </div>
+    <div class="queue" id="recQueue"></div>
+  </section>
+</div>
+
+<dialog id="recRules" class="rules">
+  <div class="dhead"><b>Reglas de pasos</b><button class="hbtn" id="rrClose">Listo</button></div>
+  <div class="dlist" id="rrBody"></div>
 </dialog>
 
 <dialog id="edItem">
@@ -675,13 +754,19 @@ const store = {
   set(v) { try { localStorage.setItem('spotpad.seen.' + sessionName, JSON.stringify(v)); } catch {} },
 };
 function isList() { return document.body.classList.contains('list'); }
-function setView(list) {
-  document.body.classList.toggle('list', list);
-  $('#vPads').classList.toggle('sel', !list); $('#vList').classList.toggle('sel', list);
-  if (list) refreshList();
+function setView(v) {
+  if (v === true) v = 'list'; if (v === false) v = 'pads';
+  document.body.classList.toggle('list', v === 'list');
+  document.body.classList.toggle('rec', v === 'rec');
+  $('#vPads').classList.toggle('sel', v === 'pads'); $('#vList').classList.toggle('sel', v === 'list');
+  $('#vRec').classList.toggle('sel', v === 'rec');
+  ls.set('spotpad.view', v);
+  if (v === 'list') refreshList();
+  if (v === 'rec') recEnter();
 }
-$('#vPads').onclick = () => setView(false);
-$('#vList').onclick = () => setView(true);
+$('#vPads').onclick = () => setView('pads');
+$('#vList').onclick = () => setView('list');
+$('#vRec').onclick = () => setView('rec');
 
 async function refreshList(manual) {
   try {
@@ -744,10 +829,197 @@ $('#spotEdit').onclick = async () => {
 setInterval(() => { if (document.visibilityState === 'visible' && isList()) refreshList(); }, 8000);
 setInterval(() => { if (document.visibilityState === 'visible' && !isList()) refreshList(); }, 30000);
 
+/* ---------- modo grabación ---------- */
+let rec = {items: [], sweepable: [], shoes: [], surfaces: [], fts: []}, recSt = {}, recCur = null, recTracks = [];
+const esc2 = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const pending = it => !it.muted && !it.done;
+function recVisible() { return rec.items.filter(it => $('#recShowDone').checked || pending(it) || (recCur && it.key === recCur)); }
+
+async function recEnter() {
+  recSt = await api('/api/rec/state').catch(() => ({}));
+  $('#recAuto').checked = recSt.auto_rename !== false;
+  recTracks = await api('/api/tracks').catch(() => []);
+  const r = await api('/api/rec/queue').catch(() => null);
+  if (r && !r.need_refresh) recApply(r); else await recRefresh();
+  recRenderSetup();
+}
+async function recRefresh() {
+  $('#recAt').textContent = 'Leyendo la sesión…';
+  try {
+    const r = await api('/api/rec/refresh', {method: 'POST'});
+    if (r.paused) { toast('Pro Tools está grabando o reproduciendo: leo cuando pares', true); }
+    recApply(r); recRenderSetup();
+  } catch (e) { $('#recAt').textContent = ''; toast(e.message, true); }
+}
+function recApply(r) {
+  if (!r || !r.items) return;
+  rec = {...rec, ...r};
+  $('#recAt').textContent = r.at ? `Sesión ${r.session} · leída ${r.at}` : '';
+  const vis = recVisible();
+  if (!recCur || !rec.items.some(i => i.key === recCur)) recCur = (vis.find(pending) || vis[0] || {}).key || null;
+  recRender();
+}
+function recRenderSetup() {
+  // Qué barrer: chips por tipo de carpeta, con pendientes por track
+  const box = $('#recSweep'); box.innerHTML = '';
+  const sweep = new Set(recSt.sweep || []);
+  const counts = {}; rec.items.forEach(i => { if (pending(i)) counts[i.track] = (counts[i.track] || 0) + 1; });
+  const groups = [['footsteps', 'Pasos'], ['props', 'Props'], ['surfaces', 'Superficies']];
+  if (!rec.sweepable.length) box.innerHTML = '<div class="hint" style="color:var(--dim);font-size:13px">Tocá «Leer sesión». Se usan las carpetas de superficies, pasos y props.</div>';
+  groups.forEach(([k, label]) => {
+    const tr = rec.sweepable.filter(t => t.kind === k); if (!tr.length) return;
+    const h = document.createElement('div'); h.className = 'sgh'; h.textContent = label; box.append(h);
+    const wrap = document.createElement('div'); wrap.className = 'swp'; box.append(wrap);
+    tr.forEach(t => {
+      const b = document.createElement('button'); b.className = 'chip' + (sweep.has(t.name) ? ' on' : '');
+      const col = tcolor(t.color); if (col) b.style.setProperty('--tc', col);
+      b.innerHTML = `${esc2(t.name)}${sweep.has(t.name) && counts[t.name] ? `<span class="n">${counts[t.name]}</span>` : ''}`;
+      b.onclick = async () => {
+        sweep.has(t.name) ? sweep.delete(t.name) : sweep.add(t.name);
+        recSt.sweep = [...sweep]; await recPutState({sweep: recSt.sweep}); recRenderSetup();
+      };
+      wrap.append(b);
+    });
+  });
+  // Superficie
+  const ss = $('#recSurf'); ss.innerHTML = '<option value="">Todas</option>' +
+    (rec.surface_tracks || []).map(n => `<option>${esc2(n)}</option>`).join('');
+  ss.value = recSt.surface_filter || '';
+  // Track de grabación (cualquier track de la sesión)
+  const rt = $('#recTrack');
+  rt.innerHTML = '<option value="">(ninguno: solo posicionar)</option>' +
+    recTracks.map(t => `<option value="${esc2(t.id)}">${esc2(t.name)}</option>`).join('');
+  rt.value = recSt.rec_track || '';
+}
+async function recPutState(patch) {
+  try { const r = await api('/api/rec/state', {method: 'PUT', body: JSON.stringify(patch)}); recApply(r); }
+  catch (e) { toast(e.message, true); }
+}
+$('#recSurf').onchange = e => { recSt.surface_filter = e.target.value; recPutState({surface_filter: recSt.surface_filter}).then(recRenderSetup); };
+$('#recTrack').onchange = e => { recSt.rec_track = e.target.value; recPutState({rec_track: recSt.rec_track}); };
+$('#recAuto').onchange = e => { recSt.auto_rename = e.target.checked; recPutState({auto_rename: recSt.auto_rename}); };
+$('#recShowDone').onchange = () => recRender();
+$('#recRefresh').onclick = recRefresh;
+
+function recItem() { return rec.items.find(i => i.key === recCur); }
+function recRender() {
+  const all = rec.items, pend = all.filter(pending).length, total = all.length;
+  $('#recProg').textContent = total ? `Pendientes ${pend} de ${total}` : 'Nada para barrer';
+  $('#recBar').style.width = total ? ((total - pend) / total * 100) + '%' : '0';
+  const it = recItem(), card = $('#recCard');
+  if (!it) {
+    card.innerHTML = `<div class="card"><div class="rempty">${(recSt.sweep || []).length ? (total ? '¡No quedan pendientes en lo que elegiste!' : 'No hay clips en esos tracks.') : 'Elegí a la izquierda qué tracks barrer (por ejemplo un calzado y una superficie, o un track de props).'}</div></div>`;
+  } else {
+    const src = it.kind === 'footsteps' && it.shoe ? ({color: 'calzado por color del track', clip: 'calzado por el nombre del clip', personaje: 'calzado fijado para el personaje', elegido: 'calzado elegido', track: ''}[it.shoe_src] || '') : '';
+    card.innerHTML = `<div class="card">
+      <div class="tcs">${esc2(it.tc_in || it.start)}<small>→ ${esc2(it.tc_out || it.end)}</small></div>
+      <div class="src">${esc2(it.track)} · clip «${esc2(it.clip)}»${it.muted ? ' · muteado' : ''}${it.done ? ' · grabado' : ''}</div>
+      <div class="nm ${it.name_src}" id="recName" title="Tocá para editar">${esc2(it.name)}</div>
+      <div class="hint">${src ? esc2(src) + ' · ' : ''}tocá el nombre para editarlo</div>
+      <div id="recNeeds"></div></div>`;
+    $('#recName').onclick = () => recEditName(it);
+    const needs = $('#recNeeds');
+    if (it.needs.includes('surface')) needs.append(recNeed('Choque de superficies: ¿sobre cuál camina?', it.surfaces, v => recChoose({key: it.key, surface: v})));
+    if (it.needs.includes('shoe')) {
+      const n = recNeed(`¿Qué calzado usa ${esc2(it.character || 'este personaje')}?`, rec.shoes, v =>
+        $('#recRemember').checked && it.character ? recChoose({character: it.character, char_shoe: v}) : recChoose({key: it.key, shoe: v}));
+      const lab = document.createElement('label'); lab.className = 'tog';
+      lab.innerHTML = `<input type="checkbox" id="recRemember" checked> Recordarlo para ${esc2(it.character || 'el personaje')} (todos sus pasos)`;
+      n.append(lab); needs.append(n);
+    }
+  }
+  $('#recDone').classList.toggle('on', !!(it && it.done));
+  $('#recDone').textContent = it && it.done ? '↺ Pendiente' : '✓ Grabado';
+  // Cola
+  const q = $('#recQueue'); q.innerHTML = '';
+  recVisible().forEach(x => {
+    const d = document.createElement('div');
+    d.className = 'qi' + (x.key === recCur ? ' cur' : '') + (pending(x) ? '' : ' gone');
+    d.innerHTML = `<span class="t">${esc2(x.tc_in || x.start)}</span><span class="q">${esc2(x.name)}</span><span class="w">${x.needs.length ? '⚠ elegir' : ''}</span>`;
+    d.onclick = () => recSelect(x.key, true);
+    q.append(d);
+  });
+  const cur = q.querySelector('.cur'); if (cur) cur.scrollIntoView({block: 'nearest'});
+}
+function recNeed(title, options, pick) {
+  const n = document.createElement('div'); n.className = 'need';
+  n.innerHTML = `<b>${title}</b><div class="opts"></div>`;
+  options.forEach(o => { const b = document.createElement('button'); b.textContent = o; b.onclick = () => pick(o); n.querySelector('.opts').append(b); });
+  return n;
+}
+async function recChoose(body) {
+  try { const r = await api('/api/rec/choice', {method: 'POST', body: JSON.stringify(body)}); recApply(r); buzz(true);
+        const it = recItem(); if (it && !it.needs.length) recGo(it); }
+  catch (e) { toast(e.message, true); }
+}
+function recEditName(it) {
+  const el = $('#recName'); const inp = document.createElement('input'); inp.className = 'nmi'; inp.value = it.name;
+  el.replaceWith(inp); inp.focus(); inp.select();
+  const finish = async save => {
+    if (save && inp.value.trim() !== it.name) {
+      const r = await api('/api/rec/choice', {method: 'POST', body: JSON.stringify({key: it.key, name: inp.value.trim()})}).catch(e => toast(e.message, true));
+      if (r) { recApply(r); recGo(recItem()); }
+    } else recRender();
+  };
+  inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
+}
+async function recGo(it) {
+  if (!it) return;
+  const rename = $('#recAuto').checked && !it.needs.length;
+  try { const r = await api('/api/rec/go', {method: 'POST', body: JSON.stringify({start: it.start, end: it.end, name: it.name, rename})});
+        toast(it.needs.length ? 'Posicionado · elegí lo que falta para renombrar' : r.msg); buzz(true); }
+  catch (e) { toast(e.message, true); }
+}
+function recSelect(key, go) { recCur = key; recRender(); if (go) recGo(recItem()); }
+function recStep(dir) {
+  // Recorre en orden de tiempo desde el actual (aunque el actual ya esté grabado)
+  const all = rec.items, ok = x => pending(x) || $('#recShowDone').checked;
+  if (!all.length) return;
+  const i = all.findIndex(x => x.key === recCur);
+  let j = i < 0 ? (dir > 0 ? 0 : all.length - 1) : i + dir;
+  while (j >= 0 && j < all.length && !ok(all[j])) j += dir;
+  if (j < 0 || j >= all.length) return toast(dir > 0 ? 'No hay más pendientes adelante' : 'No hay pendientes antes');
+  recSelect(all[j].key, true);
+}
+$('#recPrev').onclick = () => recStep(-1);
+$('#recNext').onclick = () => recStep(1);
+$('#recGo').onclick = () => recGo(recItem());
+$('#recDone').onclick = async () => {
+  const it = recItem(); if (!it) return;
+  try { const r = await api('/api/rec/done', {method: 'POST', body: JSON.stringify({key: it.key, done: !it.done})});
+        const was = it.done; recApply(r); buzz(true); if (!was) recStep(1); }
+  catch (e) { toast(e.message, true); }
+};
+
+// Reglas de pasos: cómo se interpretó cada track de la carpeta de pasos + alias de superficies
+$('#recRulesBtn').onclick = async () => {
+  if (!rec.fts || !rec.fts.length) await recRefresh();
+  const b = $('#rrBody');
+  const shoeOpts = sel => '<option value="">(automático)</option>' + rec.shoes.map(s => `<option ${s === sel ? 'selected' : ''}>${esc2(s)}</option>`).join('');
+  b.innerHTML = `<div class="hint" style="padding:8px 4px;color:var(--dim);font-size:13px">Tracks de personaje: el calzado sale del nombre del clip si lo trae; si no, del que fijes acá; si no, del color del track (igual al del track de calzado).</div>
+    <table><tbody>${rec.fts.filter(t => t.type === 'char').map(t => `<tr>
+      <td><span class="sw" style="background:${tcolor(t.color) || 'transparent'}"></span>${esc2(t.name)}</td>
+      <td style="color:var(--dim);font-size:12px">${t.shoe_track ? 'por nombre: ' + esc2(t.shoe_track) : t.shoe_color ? 'por color: ' + esc2(t.shoe_color) : 'sin deducir'}</td>
+      <td style="width:150px"><select data-char="${esc2(t.character)}">${shoeOpts(t.shoe_fixed)}</select></td></tr>`).join('')}</tbody></table>
+    <div class="hint" style="padding:12px 4px 4px;color:var(--dim);font-size:13px">Tracks de calzado (el personaje sale del nombre del clip): ${rec.fts.filter(t => t.type === 'shoe').map(t => esc2(t.name)).join(', ') || '—'}</div>
+    <div class="hint" style="padding:12px 4px 4px;color:var(--dim);font-size:13px">Nombre corto de cada superficie en el nombre de grabación (vacío = el nombre del track):</div>
+    <table><tbody>${(rec.surface_tracks || []).map(n => `<tr><td>${esc2(n)}</td><td style="width:180px"><input data-surf="${esc2(n)}" value="${esc2((rec.surface_alias || {})[n] || '')}" placeholder="${esc2(n)}"></td></tr>`).join('')}</tbody></table>`;
+  b.querySelectorAll('select[data-char]').forEach(sel => sel.onchange = () => recChoose({character: sel.dataset.char, char_shoe: sel.value}));
+  b.querySelectorAll('input[data-surf]').forEach(inp => inp.onchange = async () => {
+    const alias = {...(rec.surface_alias || {})}; if (inp.value.trim()) alias[inp.dataset.surf] = inp.value.trim(); else delete alias[inp.dataset.surf];
+    const r = await api('/api/rec/rules', {method: 'PUT', body: JSON.stringify({surface_alias: alias})}).catch(e => toast(e.message, true));
+    if (r && r.items) recApply(r);
+  });
+  $('#recRules').showModal();
+};
+$('#rrClose').onclick = () => { $('#recRules').close(); recRender(); };
+
 (async () => {
   poll(); setInterval(poll, 4000);
   presets = (await api('/api/presets')).categories || [];
   renderRecents(); await loadHidden(); await loadLayout(true);
+  if (ls.get('spotpad.view', 'pads') === 'rec') setView('rec');
   const pr = await api('/api/prefix'); prefix = pr.prefix; prefixOpts = pr.options; renderSeg();
   await Promise.all([loadTracks(), loadTargets()]); renderTargets();
 })();

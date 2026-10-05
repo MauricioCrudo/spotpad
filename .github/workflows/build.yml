@@ -41,6 +41,7 @@ jobs:
           python test_layout.py
           python test_timeout.py
           python test_presets.py
+          python test_naming.py
       - name: Compilar
         run: pyinstaller --noconfirm spotpad.spec
       - name: Prueba de arranque (Mac)
