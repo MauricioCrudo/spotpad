@@ -27,7 +27,7 @@ from aiohttp import web
 from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -58,6 +58,7 @@ TARGETS_FILE = DATA / "targets.json"   # tracks destino pinneados (por ID de tra
 STATE_FILE = DATA / "state.json"       # prefijo activo (Prps / Fts)
 SPOT_TRACKS_FILE = DATA / "spot_tracks.json"   # tracks que muestra la lista de spotting (por ID)
 DIAG_FILE = DATA / "diag.txt"
+HIDDEN_FILE = DATA / "hidden.json"      # carpetas y tracks ocultos en la botonera (por nombre)
 LOG_FILE = DATA / "spotpad.log"
 
 
@@ -795,6 +796,19 @@ def make_app(pt):
         PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
         log.info("Presets guardados desde el iPad (%s categorías)", len(clean["categories"]))
         return web.json_response(data)
+
+    # Carpetas / tracks ocultos en la botonera (se guardan por nombre: valen para cualquier sesión)
+    @routes.get("/api/hidden")
+    async def get_hidden(_):
+        return web.json_response(load_json(HIDDEN_FILE, {"folders": [], "tracks": []}))
+
+    @routes.put("/api/hidden")
+    async def put_hidden(req):
+        body = await req.json()
+        clean = {k: sorted({str(x).strip() for x in body.get(k, []) if str(x).strip()}, key=str.lower)
+                 for k in ("folders", "tracks")}
+        HIDDEN_FILE.write_text(json.dumps(clean, indent=2, ensure_ascii=False), "utf-8")
+        return web.json_response(clean)
 
     # Botón preseteado: con track destino → ahí; sin track → donde esté la selección
     @routes.post("/api/group")
