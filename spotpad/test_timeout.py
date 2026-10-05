@@ -151,3 +151,40 @@ except SpotError as e:
     assert "Link Track and Edit Selection" in str(e)
 assert ("group",) not in e3.calls            # no agrupa si la selección no quedó bien
 print("group-on OK")
+
+# --- Botón de carpeta: mover la selección al track y verificar antes de agrupar ---
+class T:
+    def __init__(s, i, n): s.id, s.name = i, n
+class GEng:
+    def __init__(self, follows, set_works=True):
+        self.sel = ("1000", "2000"); self.follows = follows; self.set_works = set_works
+        self.calls = []; eng = self
+        class C:
+            def run(_, op):
+                op.response = type("R", (), {"in_time": eng.sel[0], "out_time": eng.sel[1]})()
+        self.client = C()
+    def track_list(self): return [T("{a}", "DX1"), T("{b}", "Hardwood")]
+    def select_tracks_by_name(self, names):
+        self.calls.append(("select", names))
+        if not self.follows: self.sel = ("0", "0")
+    def set_timeline_selection(self, **k):
+        self.calls.append(("set", k["in_time"], k["out_time"]))
+        if self.set_works: self.sel = (k["in_time"], k["out_time"])
+    def group_clips(self): self.calls.append(("group",))
+    def rename_selected_clip(self, **k): self.calls.append(("rename", k["new_name"]))
+
+class GP(ProTools):
+    def __init__(self, eng): super().__init__(); self.eng = eng
+    def _eng(self): return self.eng
+
+e1 = GEng(follows=True); r = GP(e1).group_on_track("{b}")
+assert r["ok"] and ("group",) in e1.calls and not any(c[0] == "set" for c in e1.calls), e1.calls
+e2 = GEng(follows=False); GP(e2).group_on_track("{b}", "Sonia")
+assert ("set", "1000", "2000") in e2.calls and ("rename", "Sonia") in e2.calls, e2.calls
+e3 = GEng(follows=False, set_works=False)
+try:
+    GP(e3).group_on_track("{b}"); raise AssertionError("debería frenar")
+except SpotError as e:
+    assert "Link Track and Edit Selection" in str(e)
+assert ("group",) not in e3.calls            # no agrupa si la selección no quedó bien
+print("group-on OK")
