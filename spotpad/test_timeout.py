@@ -73,10 +73,23 @@ pt2.hang.set()
 print("health/reconnect OK")
 
 # --- Nunca usar GetEditSelection (cuelga el SDK de Pro Tools 2025.12) ---
+class SelClient:
+    def __init__(self, ans): self.ans, self.ops = ans, []
+    def run(self, op):
+        self.ops.append(op)
+        # Pro Tools solo respeta time_scale: sin él contesta en el contador principal
+        ok = op.request.time_scale == ptpb.TOOptions_Samples
+        op.response = type("R", (), {"in_time": self.ans[0] if ok else " 2012| 3| 077",
+                                     "out_time": self.ans[1] if ok else " 2012| 4| 000"})()
 class SelEng:
+    def __init__(self, ans=(" 100", "200")): self.client = SelClient(ans)
     def get_edit_selection(self, *a): raise AssertionError("no se debe usar GetEditSelection")
-    def get_timeline_selection(self, *a): return ("100", "200")
 assert ProTools()._selection_samples(SelEng()) == (100, 200)
+try:
+    ProTools()._selection_samples(SelEng((" 2012| 3| 077", "x")))
+    raise AssertionError("debería avisar el formato raro")
+except SpotError as e:
+    assert "2012| 3| 077" in str(e)
 src = open(bridge.__file__, encoding="utf-8").read()
 assert "e.get_edit_selection(" not in src, "volvió GetEditSelection al código"
 
@@ -101,3 +114,40 @@ assert pd.health()["needs_pt_restart"]
 assert not pd.reconnect()["ok"]          # con un intento de conexión en curso, no apila otro
 pd.ev.set()
 print("edit-selection/dead OK")
+
+# --- Botón de carpeta: mover la selección al track y verificar antes de agrupar ---
+class T:
+    def __init__(s, i, n): s.id, s.name = i, n
+class GEng:
+    def __init__(self, follows, set_works=True):
+        self.sel = ("1000", "2000"); self.follows = follows; self.set_works = set_works
+        self.calls = []; eng = self
+        class C:
+            def run(_, op):
+                op.response = type("R", (), {"in_time": eng.sel[0], "out_time": eng.sel[1]})()
+        self.client = C()
+    def track_list(self): return [T("{a}", "DX1"), T("{b}", "Hardwood")]
+    def select_tracks_by_name(self, names):
+        self.calls.append(("select", names))
+        if not self.follows: self.sel = ("0", "0")
+    def set_timeline_selection(self, **k):
+        self.calls.append(("set", k["in_time"], k["out_time"]))
+        if self.set_works: self.sel = (k["in_time"], k["out_time"])
+    def group_clips(self): self.calls.append(("group",))
+    def rename_selected_clip(self, **k): self.calls.append(("rename", k["new_name"]))
+
+class GP(ProTools):
+    def __init__(self, eng): super().__init__(); self.eng = eng
+    def _eng(self): return self.eng
+
+e1 = GEng(follows=True); r = GP(e1).group_on_track("{b}")
+assert r["ok"] and ("group",) in e1.calls and not any(c[0] == "set" for c in e1.calls), e1.calls
+e2 = GEng(follows=False); GP(e2).group_on_track("{b}", "Sonia")
+assert ("set", "1000", "2000") in e2.calls and ("rename", "Sonia") in e2.calls, e2.calls
+e3 = GEng(follows=False, set_works=False)
+try:
+    GP(e3).group_on_track("{b}"); raise AssertionError("debería frenar")
+except SpotError as e:
+    assert "Link Track and Edit Selection" in str(e)
+assert ("group",) not in e3.calls            # no agrupa si la selección no quedó bien
+print("group-on OK")

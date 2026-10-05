@@ -375,10 +375,17 @@ class ProTools:
                 raise SpotError("Marcá una región primero")
             log.info("group-on: rango %s-%s → seleccionar track «%s»", sel_in, sel_out, target.name)
             e.select_tracks_by_name([target.name])
-            log.info("group-on: re-aplicar selección")
-            # Re-aplica el rango sobre el track recién seleccionado
-            e.set_timeline_selection(in_time=str(sel_in), out_time=str(sel_out),
-                                     location_type=pt.TLType_Samples)
+            # Con «Link Track and Edit Selection» el rango ya pasa solo al track nuevo.
+            # Si no, lo re-aplicamos; y antes de agrupar verificamos que quedó igual.
+            if self._selection_samples(e) != (sel_in, sel_out):
+                log.info("group-on: re-aplicar selección")
+                e.set_timeline_selection(in_time=str(sel_in), out_time=str(sel_out),
+                                         location_type=pt.TLType_Samples)
+                got = self._selection_samples(e)
+                if got != (sel_in, sel_out):
+                    log.warning("group-on: la selección quedó en %s (esperaba %s-%s)", got, sel_in, sel_out)
+                    raise SpotError(f"No pude pasar la selección al track «{target.name}». "
+                                    "Activá Options → Link Track and Edit Selection y probá de nuevo.")
             log.info("group-on: GroupClips")
             try:
                 e.group_clips()
@@ -408,7 +415,7 @@ class ProTools:
         step("Timecode", lambda: f"start={e.session_start_time()}  rate="
              f"{pt.SessionTimeCodeRate.Name(e.session_timecode_rate())}  sr={e.session_sample_rate()}")
         step("Transporte", lambda: e.transport_state())
-        step("Selección de edición (samples)", lambda: self._selection_samples(e))
+        step("Selección (samples)", lambda: self._selection_samples(e))
 
         def tracks():
             rows = ["idx | tipo | carpeta padre | color | nombre | id"]
@@ -439,8 +446,17 @@ class ProTools:
         # Ojo: NO usar GetEditSelection. En Pro Tools 2025.12 se queda sin contestar y deja
         # al SDK de Pro Tools sin aceptar conexiones hasta reiniciarlo (visto en la prueba real).
         # GetTimelineSelection da lo mismo con «Link Timeline and Edit Selection» activado.
-        a, b = e.get_timeline_selection(pt.TLType_Samples)
-        return int(a), int(b)
+        # Pro Tools toma la unidad del campo time_scale (py-ptsl solo llena location_type y
+        # entonces responde en el formato del contador principal, p. ej. « 2012| 3| 077»).
+        from ptsl import ops
+        op = ops.CId_GetTimelineSelection(time_scale=pt.TOOptions_Samples, location_type=pt.TLType_Samples)
+        e.client.run(op)
+        a, b = op.response.in_time, op.response.out_time
+        try:
+            return int(str(a).strip()), int(str(b).strip())
+        except ValueError:
+            raise SpotError(f"Pro Tools devolvió la selección como «{str(a).strip()}» y no en samples. "
+                            "Mandame el informe para soporte.")
 
     def selected_clip(self, e):
         tracks = e.track_list()
