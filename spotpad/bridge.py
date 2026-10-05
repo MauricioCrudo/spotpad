@@ -27,7 +27,7 @@ from aiohttp import web
 from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -163,6 +163,8 @@ class ProTools:
     TIMEOUT = 10        # segundos que esperamos a Pro Tools antes de darlo por ocupado
     RETRY_AFTER = 15    # después de un cuelgue, cada cuánto probamos con una conexión nueva
     BUSY = "Pro Tools no responde. ¿Hay una ventana o diálogo abierto en Pro Tools?"
+    DEAD = ("Pro Tools dejó de aceptar conexiones del SDK. Guardá, cerrá y volvé a abrir Pro Tools; "
+            "SpotPad se reconecta solo.")
 
     def __init__(self, debug=False):
         self._engine = None
@@ -177,6 +179,7 @@ class ProTools:
         self._last_error = None             # (mensaje, cuándo)
         self._last_ok = None                # cuándo contestó bien por última vez
         self._connections = 0               # cuántas veces conectamos
+        self._connect_fails = 0             # intentos de conexión seguidos sin respuesta
 
     # -- conexión ---------------------------------------------------------- #
     def _eng(self):
@@ -191,6 +194,7 @@ class ProTools:
                 eng.client.auditor.enabled = True
             self._track_commands(eng)
             self._connections += 1
+            self._connect_fails = 0
             log.info("PTSL: conectado (conexión #%s)", self._connections)
             self._engine = eng
         return self._engine
@@ -232,6 +236,9 @@ class ProTools:
             if "PT_NoOpenedSession" in msg:
                 log.info("PTSL: no hay sesión abierta")
                 err = "No hay ninguna sesión abierta en Pro Tools"
+            elif "InProgress" in msg:
+                log.info("PTSL: Pro Tools ocupado (respuesta InProgress)")
+                err = "Pro Tools está ocupado (¿abriendo o guardando la sesión?). Probá de nuevo en un momento."
             else:
                 log.exception("PTSL")
                 if "UNAVAILABLE" in msg or "failed to connect" in msg.lower():
@@ -251,7 +258,7 @@ class ProTools:
             if self._stuck is not None:
                 fut0, since = self._stuck
                 if not fut0.done() and time.monotonic() - since < self.RETRY_AFTER:
-                    raise SpotError(self.BUSY)
+                    raise SpotError(self.DEAD if self._connect_fails >= 2 else self.BUSY)
                 if not fut0.done():
                     # Pedido colgado: lo abandonamos y probamos con una conexión nueva
                     log.warning("PTSL: abandono el pedido colgado y reconecto")
@@ -282,12 +289,18 @@ class ProTools:
                 self._stuck = (fut, time.monotonic())
             cmd = self._inflight[0] if self._inflight else "?"
             log.warning("PTSL: Pro Tools no respondió en %ss (comando: %s)", timeout or self.TIMEOUT, cmd)
-            self._last_error = (f"{self.BUSY} (comando: {cmd})", time.time())
-            raise SpotError(self.BUSY)
+            if cmd == "Conectar con Pro Tools":
+                self._connect_fails += 1
+            msg = self.DEAD if self._connect_fails >= 2 else self.BUSY
+            self._last_error = (f"{msg} (comando: {cmd})", time.time())
+            raise SpotError(msg)
 
     # -- diagnóstico y reconexión ------------------------------------------ #
     def reconnect(self):
         """Tira la conexión actual (y cualquier pedido colgado) y vuelve a conectar."""
+        if self._inflight and self._inflight[0] == "Conectar con Pro Tools":
+            # Ya hay un intento de conexión en curso: no apilar otro (tocar Reconectar varias veces)
+            return {"ok": False, "connected": False, "error": "Ya estoy intentando conectar, esperá unos segundos"}
         with self._guard:
             if self._stuck is not None and not self._stuck[0].done():
                 log.warning("PTSL: reconexión manual, abandono el pedido colgado")
@@ -309,6 +322,7 @@ class ProTools:
         return {
             "connected_once": self._connections > 0,
             "connections": self._connections,
+            "needs_pt_restart": self._connect_fails >= 2,
             "stuck": stuck,
             "inflight": inflight,
             "last_ok": fmt(self._last_ok),
@@ -422,10 +436,10 @@ class ProTools:
 
     def _selection_samples(self, e):
         from ptsl import PTSL_pb2 as pt
-        try:
-            a, b = e.get_edit_selection(pt.TLType_Samples)          # PT 2025.x
-        except Exception:
-            a, b = e.get_timeline_selection(pt.TLType_Samples)      # PT 2023.9+
+        # Ojo: NO usar GetEditSelection. En Pro Tools 2025.12 se queda sin contestar y deja
+        # al SDK de Pro Tools sin aceptar conexiones hasta reiniciarlo (visto en la prueba real).
+        # GetTimelineSelection da lo mismo con «Link Timeline and Edit Selection» activado.
+        a, b = e.get_timeline_selection(pt.TLType_Samples)
         return int(a), int(b)
 
     def selected_clip(self, e):

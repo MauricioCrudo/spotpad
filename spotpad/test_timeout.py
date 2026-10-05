@@ -71,3 +71,33 @@ r = pt2.reconnect()
 assert r["ok"] and not pt2.health()["stuck"], (r, pt2.health())
 pt2.hang.set()
 print("health/reconnect OK")
+
+# --- Nunca usar GetEditSelection (cuelga el SDK de Pro Tools 2025.12) ---
+class SelEng:
+    def get_edit_selection(self, *a): raise AssertionError("no se debe usar GetEditSelection")
+    def get_timeline_selection(self, *a): return ("100", "200")
+assert ProTools()._selection_samples(SelEng()) == (100, 200)
+src = open(bridge.__file__, encoding="utf-8").read()
+assert "e.get_edit_selection(" not in src, "volvió GetEditSelection al código"
+
+# --- Si conectar se cuelga dos veces seguidas, pedir reiniciar Pro Tools ---
+class Dead(ProTools):
+    TIMEOUT = 0.3
+    RETRY_AFTER = 0
+    def __init__(self):
+        super().__init__(); self.ev = threading.Event()
+    def _eng(self):
+        self._inflight = ("Conectar con Pro Tools", time.time())
+        self.ev.wait(3)
+pd = Dead()
+msgs = []
+for _ in range(2):
+    try:
+        pd._call(lambda e: None)
+    except SpotError as e:
+        msgs.append(str(e))
+assert "reiniciar" in msgs[-1].lower() or "volvé a abrir" in msgs[-1], msgs
+assert pd.health()["needs_pt_restart"]
+assert not pd.reconnect()["ok"]          # con un intento de conexión en curso, no apila otro
+pd.ev.set()
+print("edit-selection/dead OK")

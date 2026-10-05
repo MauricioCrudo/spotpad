@@ -260,7 +260,8 @@ async function renderStat() {
   let html = row('Versión', esc(h.version));
   html += row('Pro Tools', $('#dot').classList.contains('on') ? 'conectado' : 'sin conexión', $('#dot').classList.contains('on') ? '' : 'bad');
   if (h.inflight) html += row('Esperando respuesta', `${esc(h.inflight.command)} · ${h.inflight.seconds} s`, h.inflight.seconds > 5 ? 'warn' : '');
-  if (h.stuck) html += row('Pedido colgado', 'sí — tocá Reconectar', 'bad');
+  if (h.needs_pt_restart) html += '<div class="bad"><b>Pro Tools dejó de aceptar conexiones del SDK.</b> Guardá, cerrá y volvé a abrir Pro Tools: SpotPad se reconecta solo.</div>';
+  else if (h.stuck) html += row('Pedido colgado', 'sí — tocá Reconectar', 'bad');
   html += row('Última respuesta OK', h.last_ok || '—');
   if (h.last_error) html += row('Último error', `${esc(h.last_error.msg)} (${h.last_error.at})`, 'bad');
   html += row('Conexiones', h.connections);
