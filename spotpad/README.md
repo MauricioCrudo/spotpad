@@ -52,7 +52,7 @@ Las pestañas salen de las **carpetas** de la sesión: una por carpeta de primer
 - Marcás el rango en **cualquier** track (video, ref de diálogos) y tocás «Wood» → el clip group se crea en el track Wood con ese rango.
 - El clip group se llama como el track. Si escribís algo en «Nombre del clip» (p. ej. *Sonia* o *Extra Left* en un track de calzado), usa ese nombre. El campo se limpia después de cada uso; los nombres usados quedan como fichas para repetirlos con un toque.
 - Sumar o borrar tracks/carpetas en Pro Tools cambia la botonera sola (o tocá «↻ Tracks»). No hay plantilla fija.
-- Para ocultar carpetas: en `presets.json` (carpeta de datos), `"exclude_folders": ["AAF", "Otra"]`. Si no está, se oculta solo «AAF».
+- Para ocultar alguna carpeta: en `presets.json` (carpeta de datos), `"exclude_folders": ["Nombre"]`.
 - Las categorías de `presets.json` (p. ej. *Manos*) siguen como pestañas punteadas: crean el clip group donde esté la selección, como antes.
 - Atajo por nombre de track: `curl -X POST http://localhost:8765/api/group-on-name/Wood`
 

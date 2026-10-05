@@ -27,7 +27,7 @@ from aiohttp import web
 from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 
-VERSION = "0.3.5"
+VERSION = "0.3.6"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -779,8 +779,7 @@ def make_app(pt):
 
     # Botonera armada desde las carpetas de la sesión
     def excluded():
-        # Por defecto se oculta la carpeta del AAF (DX/FX/MX): no es para spotear
-        return load_json(PRESETS_FILE, {}).get("exclude_folders", ["AAF"])
+        return load_json(PRESETS_FILE, {}).get("exclude_folders", [])
 
     @routes.get("/api/layout")
     async def layout(_):
