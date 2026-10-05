@@ -20,9 +20,8 @@ import urllib.request
 import webbrowser
 
 import bridge
-from bridge import DATA, DIAG_FILE, MockProTools, ProTools, ipad_url, start_server
-
-APP_VERSION = "0.3.2"
+from bridge import (DATA, LOG_FILE, VERSION as APP_VERSION, MockProTools, ProTools, build_report,
+                    ipad_url, setup_logging, start_server)
 log = logging.getLogger("spotpad")
 
 
@@ -34,6 +33,17 @@ def open_path(path):
         subprocess.Popen(["open", str(path)])
     else:
         subprocess.Popen(["xdg-open", str(path)])
+
+
+def copy_to_clipboard(text):
+    """Copia al portapapeles (Mac: pbcopy, Windows: clip). Si falla, no pasa nada."""
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), timeout=5)
+        elif sys.platform == "win32":
+            subprocess.run(["clip"], input=text.encode("utf-16le"), timeout=5)
+    except Exception:                   # noqa: BLE001
+        pass
 
 
 def make_icon(size=64):
@@ -58,7 +68,7 @@ def selftest(port):
     from ptsl import PTSL_pb2        # noqa: F401
     stop = start_server(MockProTools(), port)
     try:
-        for path in ("/api/status", "/api/layout", "/", "/conectar"):
+        for path in ("/api/status", "/api/layout", "/", "/conectar", "/api/health", "/api/report"):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
                 assert r.status == 200, (path, r.status)
         print(f"selftest OK · datos en {DATA}")
@@ -75,9 +85,7 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     a, _ = ap.parse_known_args()     # macOS a veces agrega -psn_… al abrir la app
 
-    logging.basicConfig(
-        level=logging.DEBUG if a.debug else logging.INFO, format="%(asctime)s %(message)s",
-        handlers=[logging.FileHandler(DATA / "spotpad.log", encoding="utf-8"), logging.StreamHandler()])
+    setup_logging(a.debug)
 
     if a.selftest:
         sys.exit(selftest(a.port))
@@ -96,14 +104,32 @@ def main():
     import pystray
     from pystray import Menu, MenuItem as Item
 
-    def run_diag(icon, _):
+    def make_report(icon, _):
+        """Informe completo → archivo en la carpeta de datos, se abre y (Mac) queda copiado."""
         def work():
             try:
-                txt = pt.diag()
+                txt = build_report(pt)
             except Exception as e:      # noqa: BLE001
-                txt = f"ERROR: {e}"
-            DIAG_FILE.write_text(txt, "utf-8")
-            open_path(DIAG_FILE)
+                txt = f"No se pudo armar el informe: {e}"
+            f = DATA / f"informe-{time.strftime('%Y%m%d-%H%M%S')}.txt"
+            f.write_text(txt, "utf-8")
+            copy_to_clipboard(txt)
+            open_path(f)
+            try:
+                icon.notify("Informe listo (también copiado). Pegalo en la conversación con Claude.", "SpotPad")
+            except Exception:           # noqa: BLE001
+                pass
+        threading.Thread(target=work, daemon=True).start()
+
+    def do_reconnect(icon, _):
+        def work():
+            r = pt.reconnect()
+            msg = "Conectado con Pro Tools" if r.get("ok") else f"Sin conexión: {r.get('error', '?')}"
+            log.info("Reconectar (menú): %s", msg)
+            try:
+                icon.notify(msg, "SpotPad")
+            except Exception:           # noqa: BLE001
+                pass
         threading.Thread(target=work, daemon=True).start()
 
     def quit_app(icon, _):
@@ -120,9 +146,10 @@ def main():
         Item("Conectar iPad (QR)", lambda *_: webbrowser.open(local + "/conectar"), default=True),
         Item("Abrir SpotPad acá", lambda *_: webbrowser.open(local)),
         Menu.SEPARATOR,
-        Item("Diagnóstico de la sesión", run_diag),
+        Item("Reconectar con Pro Tools", do_reconnect),
+        Item("Generar informe para soporte", make_report),
+        Item("Ver registro", lambda *_: open_path(LOG_FILE)),
         Item("Carpeta de configuración", lambda *_: open_path(DATA)),
-        Item("Ver registro", lambda *_: open_path(DATA / "spotpad.log")),
         Menu.SEPARATOR,
         Item(f"Salir (v{APP_VERSION})", quit_app),
     )

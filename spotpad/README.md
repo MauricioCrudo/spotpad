@@ -16,6 +16,12 @@ La configuración queda en `~/Library/Application Support/SpotPad` (Mac) o `%APP
 
 Cada cambio que se sube al repo se compila solo (GitHub Actions) y reemplaza la «Última versión».
 
+## Si algo falla
+- **Punto rojo / «Pro Tools no responde»:** tocá **↻ Reconectar** (aparece arriba en el iPad, o en el menú del ícono: *Reconectar con Pro Tools*). Si Pro Tools deja un pedido sin contestar, SpotPad además reconecta solo a los 15 s.
+- Antes de reconectar, fijate que Pro Tools no tenga una ventana o aviso abierto esperando respuesta: mientras lo tiene, no le contesta al SDK.
+- **Estado:** tocá el punto o el nombre de la sesión arriba en el iPad → versión, conexión, último error, qué comando está esperando respuesta y los últimos comandos.
+- **Informe para soporte:** desde el panel de Estado o desde el ícono (*Generar informe para soporte*). Junta el estado, el diagnóstico de la sesión y el final del registro en un solo texto. En la Mac queda copiado en el portapapeles y guardado en la carpeta de datos: pegalo en la conversación con Claude.
+
 ## Correr desde el código (desarrollo)
 
 ## Requisitos

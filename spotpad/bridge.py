@@ -27,6 +27,7 @@ from aiohttp import web
 from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 
+VERSION = "0.3.3"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -57,6 +58,43 @@ TARGETS_FILE = DATA / "targets.json"   # tracks destino pinneados (por ID de tra
 STATE_FILE = DATA / "state.json"       # prefijo activo (Prps / Fts)
 SPOT_TRACKS_FILE = DATA / "spot_tracks.json"   # tracks que muestra la lista de spotting (por ID)
 DIAG_FILE = DATA / "diag.txt"
+LOG_FILE = DATA / "spotpad.log"
+
+
+def setup_logging(debug=False, console=True):
+    """Registro en archivo (rota a 1 MB, guarda 3) + consola."""
+    from logging.handlers import RotatingFileHandler
+    handlers = [RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8")]
+    if console:
+        handlers.append(logging.StreamHandler())
+    logging.basicConfig(level=logging.DEBUG if debug else logging.INFO,
+                        format="%(asctime)s %(message)s", handlers=handlers, force=True)
+    logging.getLogger("aiohttp.access").setLevel(logging.WARNING)   # sin una línea por cada pedido del iPad
+
+
+def build_report(pt) -> str:
+    """Todo lo necesario para diagnosticar un problema, en un solo texto para copiar y pegar."""
+    import platform
+    out = [f"# Informe de SpotPad {VERSION}",
+           f"Fecha: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+           f"Sistema: {platform.platform()} · Python {platform.python_version()}",
+           f"Datos: {DATA}", ""]
+    h = pt.health()
+    out += ["## Estado de la conexión con Pro Tools", json.dumps(h, indent=1, ensure_ascii=False), ""]
+    out += ["## Estado ahora", json.dumps(pt.status(), ensure_ascii=False), ""]
+    if not pt.health().get("stuck"):
+        try:
+            out += ["## Diagnóstico de la sesión", pt.diag(), ""]
+        except Exception as e:     # noqa: BLE001
+            out += ["## Diagnóstico de la sesión", f"No se pudo: {e}", ""]
+    else:
+        out += ["## Diagnóstico de la sesión", "Salteado: Pro Tools tiene un pedido sin contestar.", ""]
+    try:
+        lines = LOG_FILE.read_text("utf-8", errors="replace").splitlines()[-150:]
+        out += ["## Registro (últimas 150 líneas)", *lines]
+    except FileNotFoundError:
+        out += ["## Registro", "(vacío)"]
+    return "\n".join(out)
 
 
 def track_name_for(prefix: str, clip: str) -> str:
@@ -132,31 +170,77 @@ class ProTools:
         self._guard = threading.Lock()
         self._worker = None          # hilo único que habla con Pro Tools
         self._stuck = None           # pedido colgado (Pro Tools no contestó)
+        # Para el diagnóstico: qué se le pidió a Pro Tools y qué pasó
+        from collections import deque
+        self._history = deque(maxlen=40)   # últimos comandos PTSL
+        self._inflight = None               # (comando, desde) mientras espera respuesta
+        self._last_error = None             # (mensaje, cuándo)
+        self._last_ok = None                # cuándo contestó bien por última vez
+        self._connections = 0               # cuántas veces conectamos
 
     # -- conexión ---------------------------------------------------------- #
     def _eng(self):
         if self._engine is None:
             import ptsl
-            self._engine = ptsl.Engine(company_name=self.APP[0], application_name=self.APP[1])
+            self._inflight = ("Conectar con Pro Tools", time.time())
+            try:
+                eng = ptsl.Engine(company_name=self.APP[0], application_name=self.APP[1])
+            finally:
+                self._inflight = None
             if self._debug:
-                self._engine.client.auditor.enabled = True
+                eng.client.auditor.enabled = True
+            self._track_commands(eng)
+            self._connections += 1
+            log.info("PTSL: conectado (conexión #%s)", self._connections)
+            self._engine = eng
         return self._engine
+
+    def _track_commands(self, eng):
+        """Anota cada comando que se le manda a Pro Tools: nombre, duración y resultado.
+        Si uno queda colgado, el informe dice exactamente cuál fue."""
+        from ptsl import PTSL_pb2 as pt
+        client, orig = eng.client, eng.client.run
+
+        def run(op):
+            try:
+                name = pt.CommandId.Name(op.command_id()).replace("CId_", "")
+            except Exception:
+                name = type(op).__name__
+            t0 = time.time()
+            self._inflight = (name, t0)
+            log.debug("PTSL → %s", name)
+            try:
+                r = orig(op)
+            except Exception as e:
+                self._history.append((t0, name, time.time() - t0, str(e).splitlines()[0][:120]))
+                raise
+            finally:
+                self._inflight = None
+            self._history.append((t0, name, time.time() - t0, "ok"))
+            self._last_ok = time.time()
+            return r
+        client.run = run
 
     def _run(self, fn):
         try:
             return fn(self._eng())
-        except SpotError:
+        except SpotError as e:
+            self._last_error = (str(e), time.time())
             raise
         except Exception as e:          # conexión caída, PT cerrado, etc.
             msg = str(e)
             if "PT_NoOpenedSession" in msg:
                 log.info("PTSL: no hay sesión abierta")
-                raise SpotError("No hay ninguna sesión abierta en Pro Tools")
-            log.exception("PTSL")
-            if "UNAVAILABLE" in msg or "failed to connect" in msg.lower():
-                self._engine = None
-                raise SpotError("No encuentro Pro Tools (¿está abierto?)")
-            raise SpotError(msg.splitlines()[0][:200])
+                err = "No hay ninguna sesión abierta en Pro Tools"
+            else:
+                log.exception("PTSL")
+                if "UNAVAILABLE" in msg or "failed to connect" in msg.lower():
+                    self._engine = None
+                    err = "No encuentro Pro Tools (¿está abierto?)"
+                else:
+                    err = msg.splitlines()[0][:200]
+            self._last_error = (err, time.time())
+            raise SpotError(err)
 
     def _call(self, fn, timeout=None):
         """Corre fn(engine) en el hilo de Pro Tools, sin dejar que un pedido colgado
@@ -176,11 +260,11 @@ class ProTools:
                 self._stuck = None
             if self._worker is None:
                 import queue
-                self._q = queue.Queue()
+                q = self._q = queue.Queue()
 
                 def loop():
                     while True:
-                        f, job = self._q.get()
+                        f, job = q.get()
                         if f.set_running_or_notify_cancel():
                             try:
                                 f.set_result(self._run(job))
@@ -196,8 +280,42 @@ class ProTools:
         except FutTimeout:
             with self._guard:
                 self._stuck = (fut, time.monotonic())
-            log.warning("PTSL: Pro Tools no respondió en %ss", timeout or self.TIMEOUT)
+            cmd = self._inflight[0] if self._inflight else "?"
+            log.warning("PTSL: Pro Tools no respondió en %ss (comando: %s)", timeout or self.TIMEOUT, cmd)
+            self._last_error = (f"{self.BUSY} (comando: {cmd})", time.time())
             raise SpotError(self.BUSY)
+
+    # -- diagnóstico y reconexión ------------------------------------------ #
+    def reconnect(self):
+        """Tira la conexión actual (y cualquier pedido colgado) y vuelve a conectar."""
+        with self._guard:
+            if self._stuck is not None and not self._stuck[0].done():
+                log.warning("PTSL: reconexión manual, abandono el pedido colgado")
+                self._worker = None
+            self._stuck = None
+            self._engine = None
+        log.info("PTSL: reconexión manual")
+        st = self.status()
+        return {"ok": st.get("connected", False), **st}
+
+    def health(self):
+        """Estado sin hablar con Pro Tools (contesta siempre, aunque esté colgado)."""
+        now = time.time()
+        fmt = lambda t: time.strftime("%H:%M:%S", time.localtime(t)) if t else None
+        inflight = None
+        if self._inflight:
+            inflight = {"command": self._inflight[0], "seconds": round(now - self._inflight[1], 1)}
+        stuck = self._stuck is not None and not self._stuck[0].done()
+        return {
+            "connected_once": self._connections > 0,
+            "connections": self._connections,
+            "stuck": stuck,
+            "inflight": inflight,
+            "last_ok": fmt(self._last_ok),
+            "last_error": {"msg": self._last_error[0], "at": fmt(self._last_error[1])} if self._last_error else None,
+            "history": [{"at": fmt(t), "command": n, "ms": round(d * 1000), "result": r}
+                        for t, n, d, r in list(self._history)[-15:]][::-1],
+        }
 
     def status(self):
         def f(e):
@@ -486,6 +604,14 @@ class MockProTools:
         self._last = clip
         return {"ok": True, "msg": f"«{clip}» en {t['name']} (mock)"}
 
+    def health(self):
+        return {"connected_once": True, "connections": 1, "stuck": False, "inflight": None,
+                "last_ok": time.strftime("%H:%M:%S"), "last_error": None,
+                "history": [{"at": time.strftime("%H:%M:%S"), "command": "GetSessionName", "ms": 3, "result": "ok"}]}
+
+    def reconnect(self):
+        return {"ok": True, **self.status()}
+
     def diag(self):
         return "MOCK\n" + json.dumps(self.layout(), indent=1, ensure_ascii=False)
 
@@ -670,6 +796,20 @@ def make_app(pt):
         except (KeyError, ValueError, TypeError):
             return web.json_response({"ok": False, "error": "Faltan start/end"}, status=400)
 
+    # Diagnóstico y reconexión (health no habla con Pro Tools: contesta siempre)
+    @routes.get("/api/health")
+    async def health(_):
+        return web.json_response({"version": VERSION, **pt.health()})
+
+    @routes.post("/api/reconnect")
+    async def reconnect(_):
+        return await run(pt.reconnect)
+
+    @routes.get("/api/report")
+    async def report(_):
+        txt = await asyncio.get_running_loop().run_in_executor(None, build_report, pt)
+        return web.Response(text=txt, content_type="text/plain", charset="utf-8")
+
     @routes.post("/api/undo")
     async def undo(_):
         return await run(pt.undo)
@@ -754,7 +894,7 @@ def main():
     ap.add_argument("--debug", action="store_true", help="loguear el tráfico PTSL")
     ap.add_argument("--diag", action="store_true", help="imprimir tracks/carpetas/colores de la sesión y salir")
     a = ap.parse_args()
-    logging.basicConfig(level=logging.DEBUG if a.debug else logging.INFO, format="%(message)s")
+    setup_logging(a.debug)
 
     if a.diag:
         txt = (MockProTools() if a.mock else ProTools(debug=a.debug)).diag()

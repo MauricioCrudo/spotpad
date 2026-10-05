@@ -32,3 +32,42 @@ try:
 except SpotError as e:
     assert "sesión abierta" in str(e), e
 print("timeout OK")
+
+# --- El estado dice qué comando quedó colgado, y Reconectar lo destraba ---
+from ptsl import PTSL_pb2 as ptpb
+
+class Op:
+    def command_id(self): return ptpb.CId_GroupClips
+
+class Client:
+    def __init__(self, ev): self.ev = ev
+    def run(self, op): self.ev.wait(5)
+
+class Eng:
+    def __init__(self, ev): self.client = Client(ev)
+    def group_clips(self): self.client.run(Op())
+
+class Fake2(ProTools):
+    TIMEOUT = 0.5
+    RETRY_AFTER = 60
+    def __init__(self):
+        super().__init__(); self.hang = threading.Event()
+    def _eng(self):
+        if self._engine is None:
+            e = Eng(self.hang); self._track_commands(e); self._engine = e; self._connections += 1
+        return self._engine
+    def status(self):
+        return {"connected": True, "session": "S"}
+
+pt2 = Fake2()
+try:
+    pt2._call(lambda e: e.group_clips())
+except SpotError:
+    pass
+h = pt2.health()
+assert h["stuck"] and h["inflight"]["command"] == "GroupClips", h
+assert "GroupClips" in h["last_error"]["msg"], h
+r = pt2.reconnect()
+assert r["ok"] and not pt2.health()["stuck"], (r, pt2.health())
+pt2.hang.set()
+print("health/reconnect OK")
