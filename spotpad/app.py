@@ -20,8 +20,11 @@ import urllib.request
 import webbrowser
 
 import bridge
-from bridge import (DATA, LOG_FILE, VERSION as APP_VERSION, MockProTools, ProTools, build_report,
+from bridge import (DATA, LOG_FILE, VERSION as APP_VERSION, MockProTools, ProTools, RecController, build_report,
                     ipad_url, setup_logging, start_server)
+import hotkeys as hk
+
+HOTKEYS_FILE = DATA / "hotkeys.json"
 log = logging.getLogger("spotpad")
 
 
@@ -66,7 +69,12 @@ def selftest(port):
     """Arranca en modo mock, pide /api/status y /api/layout, y sale. Exit 0 = OK."""
     import ptsl                      # noqa: F401  (que el SDK haya quedado empaquetado)
     from ptsl import PTSL_pb2        # noqa: F401
-    stop = start_server(MockProTools(), port)
+    if sys.platform in ("darwin", "win32"):     # que la librería de teclado haya quedado empaquetada
+        from pynput import keyboard
+        for b in hk.DEFAULTS["bindings"].values():
+            keyboard.HotKey.parse(b)
+    pt = MockProTools()
+    stop = start_server(pt, port, RecController(pt))
     try:
         for path in ("/api/status", "/api/layout", "/", "/conectar", "/api/health", "/api/report"):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
@@ -92,8 +100,9 @@ def main():
 
     pt = MockProTools() if a.mock else ProTools(debug=a.debug)
     local = f"http://localhost:{a.port}"
+    rec = RecController(pt)          # compartido por el iPad y los atajos de teclado
     try:
-        stop = start_server(pt, a.port)
+        stop = start_server(pt, a.port, rec)
     except OSError as e:
         log.error("No pude abrir el puerto %s: %s", a.port, e)
         # Probablemente ya hay un SpotPad abierto: mostramos su página y salimos
@@ -132,8 +141,30 @@ def main():
                 pass
         threading.Thread(target=work, daemon=True).start()
 
+    # Atajos de teclado globales (funcionan con Pro Tools en primer plano)
+    keys = hk.Hotkeys(rec, HOTKEYS_FILE, icon_ref=lambda: icon)
+
+    def keys_restart(icon, _):
+        ok = keys.start()
+        hk.notify("SpotPad", "Atajos activos" if ok else f"Atajos: {keys.error}", icon)
+        icon.update_menu()
+
+    def keys_items():
+        rows = [Item(f"{k}   {desc}", None, enabled=False) for desc, k in keys.summary()]
+        state = "activos" if keys.listener and not keys.error else (keys.error or "inactivos")
+        return Menu(
+            Item(f"Estado: {state}", None, enabled=False),
+            *rows,
+            Menu.SEPARATOR,
+            Item("Reactivar atajos", keys_restart),
+            Item("Cambiar teclas (hotkeys.json)", lambda *_: open_path(HOTKEYS_FILE)),
+            *([Item("Permiso de Accesibilidad…", lambda *_: hk.open_accessibility_settings())]
+              if sys.platform == "darwin" else []),
+        )
+
     def quit_app(icon, _):
         log.info("Saliendo")
+        keys.stop()
         try:
             stop()
             icon.stop()
@@ -146,6 +177,7 @@ def main():
         Item("Conectar iPad (QR)", lambda *_: webbrowser.open(local + "/conectar"), default=True),
         Item("Abrir SpotPad acá", lambda *_: webbrowser.open(local)),
         Menu.SEPARATOR,
+        Item("Atajos de teclado", Menu(lambda: keys_items().items)),
         Item("Reconectar con Pro Tools", do_reconnect),
         Item("Generar informe para soporte", make_report),
         Item("Ver registro", lambda *_: open_path(LOG_FILE)),
@@ -161,7 +193,12 @@ def main():
         first.write_text("1")
         threading.Timer(1.0, lambda: webbrowser.open(local + "/conectar")).start()
 
-    icon.run()
+    def setup(icon):
+        icon.visible = True
+        keys.start()
+        icon.update_menu()
+
+    icon.run(setup=setup)
 
 
 if __name__ == "__main__":

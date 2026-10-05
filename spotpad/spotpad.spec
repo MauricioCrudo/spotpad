@@ -15,7 +15,9 @@ binaries, hidden = [], []
 for pkg in ("ptsl", "grpc", "qrcode"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hidden += h
-hidden += collect_submodules("pystray") + ["PIL._tkinter_finder"]
+hidden += collect_submodules("pystray") + collect_submodules("pynput") + ["PIL._tkinter_finder", "hotkeys", "naming"]
+if is_mac:
+    hidden += ["HIServices", "Quartz", "AppKit", "Foundation", "objc"]
 
 a = Analysis(["app.py"], pathex=["."], datas=datas, binaries=binaries, hiddenimports=hidden,
              excludes=["tkinter", "matplotlib", "numpy"])

@@ -283,6 +283,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
     <label class="tog"><input type="checkbox" id="recShowDone"> Mostrar también los ya grabados</label>
     <div style="display:flex;gap:8px"><button class="hbtn" id="recRefresh" style="flex:1">↻ Leer sesión</button><button class="hbtn" id="recRulesBtn">⚙ Reglas de pasos</button></div>
     <div class="hint" id="recAt" style="font-size:12px;color:var(--dim)"></div>
+    <div id="recKeys" style="font-size:12px;color:var(--dim);line-height:1.6"></div>
   </section>
   <section class="rmain">
     <div class="prog"><span id="recProg">—</span><span class="bar"><i id="recBar" style="width:0"></i></span></div>
@@ -835,7 +836,21 @@ const esc2 = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '
 const pending = it => !it.muted && !it.done;
 function recVisible() { return rec.items.filter(it => $('#recShowDone').checked || pending(it) || (recCur && it.key === recCur)); }
 
+let recSig = '';
+async function recPoll() {           // sigue lo que se hace con los atajos desde la computadora
+  if (document.visibilityState !== 'visible' || !document.body.classList.contains('rec')) return;
+  if (document.querySelector('#recName + input, input.nmi') || document.querySelector('dialog[open]')) return;
+  const r = await api('/api/rec/queue').catch(() => null);
+  if (!r || r.need_refresh) return;
+  const sig = r.cur + '|' + r.items.map(i => i.key + (i.done ? 'd' : '') + i.name).join(',');
+  if (sig !== recSig) { recSig = sig; if (r.cur) recCur = r.cur; recApply(r); }
+}
+setInterval(recPoll, 2000);
 async function recEnter() {
+  api('/api/hotkeys').then(h => {
+    $('#recKeys').innerHTML = h.enabled && h.keys.length ? '<b style="color:var(--text)">Atajos en la computadora</b><br>' +
+      h.keys.map(k => `<span class="mono" style="color:var(--text)">${esc2(k.label)}</span> ${esc2(k.desc)}`).join('<br>') : '';
+  }).catch(() => {});
   recSt = await api('/api/rec/state').catch(() => ({}));
   $('#recAuto').checked = recSt.auto_rename !== false;
   recTracks = await api('/api/tracks').catch(() => []);
@@ -855,6 +870,7 @@ function recApply(r) {
   if (!r || !r.items) return;
   rec = {...rec, ...r};
   $('#recAt').textContent = r.at ? `Sesión ${r.session} · leída ${r.at}` : '';
+  if (r.cur && rec.items.some(i => i.key === r.cur)) recCur = r.cur;      // lo que se movió con los atajos
   const vis = recVisible();
   if (!recCur || !rec.items.some(i => i.key === recCur)) recCur = (vis.find(pending) || vis[0] || {}).key || null;
   recRender();
@@ -967,7 +983,7 @@ function recEditName(it) {
 async function recGo(it) {
   if (!it) return;
   const rename = $('#recAuto').checked && !it.needs.length;
-  try { const r = await api('/api/rec/go', {method: 'POST', body: JSON.stringify({start: it.start, end: it.end, name: it.name, rename})});
+  try { const r = await api('/api/rec/go', {method: 'POST', body: JSON.stringify({key: it.key, start: it.start, end: it.end, name: it.name, rename})});
         toast(it.needs.length ? 'Posicionado · elegí lo que falta para renombrar' : r.msg); buzz(true); }
   catch (e) { toast(e.message, true); }
 }

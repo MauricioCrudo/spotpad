@@ -105,6 +105,22 @@ Para el grabador: barre el spotting clip por clip y deja el track de grabación 
   - Si no se puede deducir el calzado, lo pregunta una vez y lo recuerda para ese personaje.
 - **⚙ Reglas de pasos**: cómo se interpretó cada track, calzado fijo por personaje y nombre corto de cada superficie (*Gritty Concrete Street* → *Gritty*). Se guardan en `footsteps.json`.
 
+### Atajos de teclado (desde Pro Tools, sin tocar el iPad)
+Funcionan con Pro Tools en primer plano:
+
+| Mac | Windows | Acción |
+|---|---|---|
+| **⌃⌥⌘R** | Ctrl+Alt+Shift+R | **Renombrar el track de grabación con el clip seleccionado**: clic en un clip de spotting y atajo |
+| **⌃⌥⌘→** | Ctrl+Alt+Shift+→ | Siguiente pendiente (posiciona y renombra) |
+| **⌃⌥⌘←** | Ctrl+Alt+Shift+← | Anterior pendiente |
+| **⌃⌥⌘G** | Ctrl+Alt+Shift+G | Marcar grabado y pasar al siguiente |
+
+- Usan la misma configuración que la pestaña Grabar (track de grabación, qué barrer, reglas). El iPad sigue solo lo que hacés con las teclas.
+- Si falta elegir superficie o calzado, aparece una notificación y lo resolvés en el iPad.
+- **Mac:** la primera vez macOS pide permiso de **Accesibilidad** para SpotPad (Ajustes del Sistema → Privacidad y seguridad → Accesibilidad). Como la app no está firmada, después de actualizarla puede pedirlo de nuevo: sacá SpotPad de la lista y volvé a agregarlo.
+- Para cambiar las teclas: ícono → *Atajos de teclado → Cambiar teclas (hotkeys.json)*, y después *Reactivar atajos*.
+- Las mismas acciones para Stream Deck / Keyboard Maestro: `POST /api/rec/from-selection`, `/api/rec/next`, `/api/rec/prev`, `/api/rec/done-next`.
+
 Las carpetas se reconocen por nombre: superficies (*SUPERFICIES/SURFACES*), pasos (*FTS/FOOTSTEPS*), props (*PRPS/PROPS*).
 
 ## Atajos de teclado / Stream Deck

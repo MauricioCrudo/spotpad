@@ -28,7 +28,7 @@ from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 import naming
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -688,17 +688,31 @@ class ProTools:
             return {"paused": False, "session": e.session_name(), "tracks": tracks, "edl": edl, "tc": self._tc(e)}
         return self._call(f, timeout=40)
 
-    def rec_go(self, start: int, end: int, rec_track_id: str, name: str):
+    def rec_selection(self):
+        """Tracks con selección de edición y el rango seleccionado (para «renombrar desde la selección»)."""
+        def f(e):
+            tracks = e.track_list()
+            cand = [t for t in tracks if self._is_set(t.track_attributes.has_edit_selection)]
+            if not cand:
+                cand = [t for t in tracks if self._is_set(t.track_attributes.is_selected)]
+            if not cand:
+                raise SpotError("Hacé clic en un clip de spotting en Pro Tools primero")
+            a, b = self._selection_samples(e)
+            return {"tracks": [t.name for t in sorted(cand, key=lambda t: t.index)], "in": a, "out": b}
+        return self._call(f)
+
+    def rec_go(self, start: int, end: int, rec_track_id: str, name: str, locate: bool = True):
         """Posiciona Pro Tools en el clip y renombra el track de grabación."""
         from ptsl import PTSL_pb2 as pt
 
         def f(e):
             notes = []
-            e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
-                                     location_type=pt.TLType_Samples)
-            if self._selection_samples(e) != (int(start), int(end)):
-                notes.append("no pude posicionar Pro Tools en el clip")
-            msg = "Posicionado"
+            if locate:
+                e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
+                                         location_type=pt.TLType_Samples)
+                if self._selection_samples(e) != (int(start), int(end)):
+                    notes.append("no pude posicionar Pro Tools en el clip")
+            msg = "Posicionado" if locate else "Listo"
             if rec_track_id and name:
                 tracks = e.track_list()
                 target = next((t for t in tracks if t.id == rec_track_id), None)
@@ -843,12 +857,17 @@ class MockProTools:
         return {"paused": False, "session": "MOCK_R1_Foley", "tracks": tracks, "edl": edl,
                 "tc": TcConverter(S, "01:00:00:00", rate_from_enum("STCR_Fps25"))}
 
-    def rec_go(self, start, end, rec_track_id, name):
+    def rec_selection(self):
+        return {"tracks": ["Henry"], "in": 36 * 48000, "out": 37 * 48000}
+
+    def rec_go(self, start, end, rec_track_id, name, locate=True):
         if not rec_track_id:
             return {"ok": True, "msg": "Posicionado (mock) · sin track de grabación elegido"}
         t = next((t for t in self._tracks if t["id"] == rec_track_id), None)
         if not t:
             raise SpotError("El track de grabación ya no existe: elegilo de nuevo")
+        if not name:
+            return {"ok": True, "msg": "Posicionado (mock)"}
         t["name"] = name
         return {"ok": True, "msg": f"Track de grabación: «{name}» (mock)"}
 
@@ -863,7 +882,188 @@ def load_json(path, default):
         return default
 
 
-def make_app(pt):
+# --------------------------------------------------------------------------- #
+#  Modo grabación: estado compartido por la API (iPad) y los atajos de teclado
+# --------------------------------------------------------------------------- #
+class RecController:
+    def __init__(self, pt):
+        self.pt = pt
+        self.snap = None            # última foto de la sesión (tracks + EDL)
+        self.lock = threading.RLock()
+
+    # -- persistencia ---------------------------------------------------------- #
+    def store(self):
+        return load_json(REC_FILE, {"rec_track": "", "sweep": [], "surface_filter": "", "auto_rename": True,
+                                    "cur": "", "sessions": {}})
+
+    def save(self, st):
+        REC_FILE.write_text(json.dumps(st, indent=2, ensure_ascii=False), "utf-8")
+
+    def set_state(self, patch):
+        with self.lock:
+            st = self.store()
+            for k in ("rec_track", "sweep", "surface_filter", "auto_rename", "cur"):
+                if k in patch:
+                    st[k] = patch[k]
+            self.save(st)
+            return self.build(st)
+
+    # -- foto de la sesión y cola ---------------------------------------------- #
+    def refresh(self):
+        snap = self.pt.rec_snapshot()
+        if snap.get("paused"):
+            base = self.build() if self.snap else {"ok": True, "items": []}
+            base["paused"] = True
+            return base
+        snap["at"] = time.strftime("%H:%M:%S")
+        self.snap = snap
+        return self.build()
+
+    def build(self, st=None, sweep=None):
+        st = st or self.store()
+        snap = self.snap
+        if not snap:
+            return {"ok": True, "items": [], "need_refresh": True, "cur": st.get("cur", "")}
+        rules = load_rules()
+        sess = st.get("sessions", {}).get(snap["session"], {})
+        prefixes = load_json(PRESETS_FILE, {}).get("track_prefixes", ["Prps", "Fts"])
+        q = naming.build_queue(snap["tracks"], snap["edl"], sweep if sweep is not None else st.get("sweep", []),
+                               rules, sess.get("choices", {}), set(sess.get("done", [])), prefixes,
+                               None if sweep is not None else (st.get("surface_filter") or None), snap["tc"])
+        if sweep is not None:
+            return q
+        kinds = {t["name"]: naming.folder_kind(t["folder"], rules) for t in snap["tracks"]}
+        sweepable = [{"name": t["name"], "color": t["color"], "folder": t["folder"], "kind": kinds[t["name"]]}
+                     for t in snap["tracks"] if kinds[t["name"]]]
+        fts = [t for t in snap["tracks"] if kinds[t["name"]] == "footsteps"]
+        colors = naming.shoe_colors(fts, rules)
+        char_shoes = {naming.norm(k): v for k, v in rules.get("char_shoes", {}).items()}
+        fts_info = []
+        for t in fts:
+            c = naming.classify_fts(t["name"], rules)
+            fts_info.append({"name": t["name"], "color": t["color"], "type": c["type"], "character": c["character"],
+                             "shoe_track": c["shoe"], "shoe_color": colors.get(str(t["color"]).lower()),
+                             "shoe_fixed": char_shoes.get(naming.norm(c["character"] or "")),
+                             "shoe": c["shoe"] or colors.get(str(t["color"]).lower())})
+        surf = [t["name"] for t in snap["tracks"] if kinds[t["name"]] == "surfaces"]
+        return {"ok": True, "session": snap["session"], "at": snap["at"], **q, "sweepable": sweepable,
+                "fts": fts_info, "surface_alias": rules.get("surface_alias", {}), "surface_tracks": surf,
+                "cur": st.get("cur", "")}
+
+    def _sess(self, st):
+        return st.setdefault("sessions", {}).setdefault(self.snap["session"], {})
+
+    def choice(self, body):
+        with self.lock:
+            st = self.store()
+            if body.get("character") and "char_shoe" in body:      # calzado fijo de un personaje (todas las sesiones)
+                user = load_json(RULES_FILE, {})
+                cs = user.setdefault("char_shoes", {})
+                if body["char_shoe"]:
+                    cs[str(body["character"]).upper()] = body["char_shoe"]
+                else:
+                    cs.pop(str(body["character"]).upper(), None)
+                RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
+            if body.get("key") and self.snap:
+                ch = self._sess(st).setdefault("choices", {})
+                c = ch.setdefault(body["key"], {})
+                for k in ("surface", "shoe", "name"):
+                    if k in body:
+                        if body[k]:
+                            c[k] = body[k]
+                        else:
+                            c.pop(k, None)
+                if not c:
+                    ch.pop(body["key"], None)
+            self.save(st)
+            return self.build(st)
+
+    def mark_done(self, key, done=True):
+        with self.lock:
+            st = self.store()
+            if self.snap and key:
+                sess = self._sess(st)
+                d = set(sess.get("done", []))
+                (d.add if done else d.discard)(key)
+                sess["done"] = sorted(d)
+                self.save(st)
+            return self.build(st)
+
+    # -- ir a un clip / navegar ------------------------------------------------- #
+    def _item(self, q, key):
+        return next((i for i in q["items"] if i["key"] == key), None)
+
+    def go_to(self, key, start, end, name, rename=None):
+        with self.lock:
+            st = self.store()
+            if key:
+                st["cur"] = key
+                self.save(st)
+            do_rename = st.get("auto_rename", True) if rename is None else bool(rename)
+            r = self.pt.rec_go(start, end, st.get("rec_track", ""), name.strip() if do_rename else "")
+            return {**r, "cur": key or st.get("cur", "")}
+
+    def _go_item(self, it, st):
+        rename = st.get("auto_rename", True) and not it["needs"]
+        r = self.go_to(it["key"], it["start"], it["end"], it["name"], rename)
+        if it["needs"]:
+            what = " y ".join({"surface": "la superficie", "shoe": "el calzado"}[n] for n in it["needs"])
+            r["msg"] = f"Posicionado · falta elegir {what} en el iPad"
+        return {**r, "item": it}
+
+    def step(self, direction):
+        """Siguiente/anterior pendiente en orden de tiempo, desde el clip actual."""
+        with self.lock:
+            if not self.snap:
+                self.refresh()
+            st = self.store(); q = self.build(st); items = q["items"]
+            if not items:
+                raise SpotError("No hay nada para barrer: elegí los tracks en la pestaña Grabar")
+            pend = lambda x: not x["muted"] and not x["done"]
+            i = next((k for k, x in enumerate(items) if x["key"] == st.get("cur")), -1)
+            j = (0 if direction > 0 else len(items) - 1) if i < 0 else i + direction
+            while 0 <= j < len(items) and not pend(items[j]):
+                j += direction
+            if not 0 <= j < len(items):
+                raise SpotError("No hay más pendientes " + ("adelante" if direction > 0 else "atrás"))
+            return self._go_item(items[j], st)
+
+    def done_next(self):
+        with self.lock:
+            st = self.store()
+            if not st.get("cur"):
+                raise SpotError("No hay un clip actual: usá Siguiente primero")
+            self.mark_done(st["cur"], True)
+            return self.step(1)
+
+    # -- renombrar desde el clip seleccionado en Pro Tools ---------------------- #
+    def from_selection(self):
+        """Clic en un clip de spotting en Pro Tools + atajo → el track de grabación toma su nombre."""
+        with self.lock:
+            st = self.store()
+            if not st.get("rec_track"):
+                raise SpotError("Elegí el track de grabación en la pestaña Grabar del iPad")
+            sel = self.pt.rec_selection()           # {"tracks": [...], "in": n, "out": n}
+            for attempt in (0, 1):
+                if not self.snap or attempt:
+                    self.refresh()
+                for tname in sel["tracks"]:
+                    q = self.build(st, sweep=[tname])
+                    hits = [i for i in q["items"] if naming.overlaps(sel["in"], sel["out"], i["start"], i["end"])]
+                    if hits:
+                        it = max(hits, key=lambda i: min(i["end"], max(sel["out"], sel["in"] + 1))
+                                                     - max(i["start"], sel["in"]))
+                        if it["needs"]:
+                            st["cur"] = it["key"]; self.save(st)
+                            what = " y ".join({"surface": "la superficie", "shoe": "el calzado"}[n] for n in it["needs"])
+                            raise SpotError(f"«{it['name']}»: falta elegir {what} (en la pestaña Grabar)")
+                        r = self.pt.rec_go(it["start"], it["end"], st["rec_track"], it["name"], locate=False)
+                        st["cur"] = it["key"]; self.save(st)
+                        return {**r, "item": it, "cur": it["key"]}
+            raise SpotError("No encontré un clip de spotting bajo la selección")
+
+
+def make_app(pt, rec=None):
     routes = web.RouteTableDef()
 
     async def run(fn, *args):
@@ -1046,120 +1246,75 @@ def make_app(pt):
         except (KeyError, ValueError, TypeError):
             return web.json_response({"ok": False, "error": "Faltan start/end"}, status=400)
 
-    # ---- Modo grabación ------------------------------------------------------- #
-    rec_cache = {}      # última foto de la sesión (tracks + EDL), para no re-exportar en cada toque
+    # ---- Modo grabación (la lógica vive en RecController: la usan también los atajos) ---- #
+    rec = rec or RecController(pt)
 
-    def rec_store():
-        return load_json(REC_FILE, {"rec_track": "", "sweep": [], "surface_filter": "", "auto_rename": True,
-                                    "sessions": {}})
-
-    def rec_save(st):
-        REC_FILE.write_text(json.dumps(st, indent=2, ensure_ascii=False), "utf-8")
-
-    def rec_build(st):
-        snap = rec_cache.get("snap")
-        if not snap:
-            return {"ok": True, "items": [], "need_refresh": True}
-        sess = st.get("sessions", {}).get(snap["session"], {})
-        prefixes = load_json(PRESETS_FILE, {}).get("track_prefixes", ["Prps", "Fts"])
-        q = naming.build_queue(snap["tracks"], snap["edl"], st.get("sweep", []), load_rules(),
-                               sess.get("choices", {}), set(sess.get("done", [])), prefixes,
-                               st.get("surface_filter") or None, snap["tc"])
-        kinds = {t["name"]: naming.folder_kind(t["folder"], load_rules()) for t in snap["tracks"]}
-        sweepable = [{"name": t["name"], "color": t["color"], "folder": t["folder"], "kind": kinds[t["name"]]}
-                     for t in snap["tracks"] if kinds[t["name"]]]
-        # Para el panel de reglas: cómo se interpretó cada track de pasos
-        rules = load_rules()
-        fts = [t for t in snap["tracks"] if kinds[t["name"]] == "footsteps"]
-        colors = naming.shoe_colors(fts, rules)
-        char_shoes = {naming.norm(k): v for k, v in rules.get("char_shoes", {}).items()}
-        fts_info = []
-        for t in fts:
-            c = naming.classify_fts(t["name"], rules)
-            auto = c["shoe"] or colors.get(str(t["color"]).lower())
-            fts_info.append({"name": t["name"], "color": t["color"], "type": c["type"], "character": c["character"],
-                             "shoe_track": c["shoe"], "shoe_color": colors.get(str(t["color"]).lower()),
-                             "shoe_fixed": char_shoes.get(naming.norm(c["character"] or "")), "shoe": auto})
-        surf = [t["name"] for t in snap["tracks"] if kinds[t["name"]] == "surfaces"]
-        return {"ok": True, "session": snap["session"], "at": snap["at"], **q, "sweepable": sweepable,
-                "fts": fts_info, "surface_alias": rules.get("surface_alias", {}), "surface_tracks": surf}
+    async def rec_call(fn, *args):
+        loop = asyncio.get_running_loop()
+        try:
+            return web.json_response(await loop.run_in_executor(None, fn, *args))
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
 
     @routes.get("/api/rec/state")
     async def rec_state(_):
-        st = rec_store(); st.pop("sessions", None)
+        st = rec.store(); st.pop("sessions", None)
         return web.json_response(st)
 
     @routes.put("/api/rec/state")
     async def rec_put_state(req):
-        body = await req.json(); st = rec_store()
-        for k in ("rec_track", "sweep", "surface_filter", "auto_rename"):
-            if k in body:
-                st[k] = body[k]
-        rec_save(st)
-        return web.json_response(rec_build(st))
+        return web.json_response(rec.set_state(await req.json()))
 
     @routes.post("/api/rec/refresh")
     async def rec_refresh(_):
-        loop = asyncio.get_running_loop()
-        try:
-            snap = await loop.run_in_executor(None, pt.rec_snapshot)
-        except SpotError as e:
-            return web.json_response({"ok": False, "error": str(e)}, status=409)
-        if snap.get("paused"):
-            base = rec_build(rec_store()) if rec_cache.get("snap") else {"ok": True, "items": []}
-            base["paused"] = True
-            return web.json_response(base)
-        snap["at"] = time.strftime("%H:%M:%S")
-        rec_cache["snap"] = snap
-        return web.json_response(rec_build(rec_store()))
+        return await rec_call(rec.refresh)
 
     @routes.get("/api/rec/queue")
     async def rec_queue(_):
-        return web.json_response(rec_build(rec_store()))
+        return web.json_response(rec.build())
 
-    # Elecciones: superficie en un choque, calzado de un personaje, nombre editado a mano
     @routes.post("/api/rec/choice")
     async def rec_choice(req):
-        body = await req.json(); st = rec_store()
-        snap = rec_cache.get("snap")
-        if body.get("character") and "char_shoe" in body:          # calzado fijo de un personaje (todas las sesiones)
-            user = load_json(RULES_FILE, {})
-            cs = user.setdefault("char_shoes", {})
-            if body["char_shoe"]:
-                cs[str(body["character"]).upper()] = body["char_shoe"]
-            else:
-                cs.pop(str(body["character"]).upper(), None)
-            RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
-        if body.get("key") and snap:
-            ch = st.setdefault("sessions", {}).setdefault(snap["session"], {}).setdefault("choices", {})
-            c = ch.setdefault(body["key"], {})
-            for k in ("surface", "shoe", "name"):
-                if k in body:
-                    if body[k]: c[k] = body[k]
-                    else: c.pop(k, None)
-            if not c: ch.pop(body["key"], None)
-        rec_save(st)
-        return web.json_response(rec_build(st))
+        return web.json_response(rec.choice(await req.json()))
 
     @routes.post("/api/rec/done")
     async def rec_done(req):
-        body = await req.json(); st = rec_store(); snap = rec_cache.get("snap")
-        if snap and body.get("key"):
-            sess = st.setdefault("sessions", {}).setdefault(snap["session"], {})
-            done = set(sess.get("done", []))
-            (done.add if body.get("done", True) else done.discard)(body["key"])
-            sess["done"] = sorted(done)
-            rec_save(st)
-        return web.json_response(rec_build(st))
+        body = await req.json()
+        return web.json_response(rec.mark_done(body.get("key"), body.get("done", True)))
 
     @routes.post("/api/rec/go")
     async def rec_go(req):
-        body = await req.json(); st = rec_store()
-        name = str(body.get("name", "")).strip() if body.get("rename", st.get("auto_rename", True)) else ""
+        body = await req.json()
         try:
-            return await run(pt.rec_go, int(body["start"]), int(body["end"]), st.get("rec_track", ""), name)
+            start, end = int(body["start"]), int(body["end"])
         except (KeyError, ValueError, TypeError):
             return web.json_response({"ok": False, "error": "Faltan start/end"}, status=400)
+        return await rec_call(rec.go_to, body.get("key"), start, end, str(body.get("name", "")), body.get("rename"))
+
+    # Acciones de una tecla (atajos globales, Stream Deck, Keyboard Maestro)
+    @routes.post("/api/rec/next")
+    async def rec_next(_):
+        return await rec_call(rec.step, 1)
+
+    @routes.post("/api/rec/prev")
+    async def rec_prev(_):
+        return await rec_call(rec.step, -1)
+
+    @routes.post("/api/rec/done-next")
+    async def rec_done_next(_):
+        return await rec_call(rec.done_next)
+
+    @routes.post("/api/rec/from-selection")
+    async def rec_from_sel(_):
+        return await rec_call(rec.from_selection)
+
+    @routes.get("/api/hotkeys")
+    async def get_hotkeys(_):
+        import hotkeys as hk
+        cfg = hk.load(DATA / "hotkeys.json")
+        return web.json_response({"enabled": cfg.get("enabled", True),
+                                  "keys": [{"action": a, "desc": hk.ACTIONS[a], "label": hk.label(b)}
+                                           for a, b in cfg["bindings"].items() if a in hk.ACTIONS]})
 
     @routes.get("/api/rec/rules")
     async def rec_rules(_):
@@ -1172,7 +1327,7 @@ def make_app(pt):
             if k in body:
                 user[k] = body[k]
         RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
-        return web.json_response(rec_build(rec_store()) if rec_cache.get("snap") else {"ok": True})
+        return web.json_response(rec.build() if rec.snap else {"ok": True})
 
     # Diagnóstico y reconexión (health no habla con Pro Tools: contesta siempre)
     @routes.get("/api/health")
@@ -1194,6 +1349,7 @@ def make_app(pt):
 
     app = web.Application()
     app["port"] = 8765
+    app["rec"] = rec
     app.add_routes(routes)
     return app
 
@@ -1222,11 +1378,11 @@ color:#E8A33D}}p{{color:#8d8c94;max-width:420px;margin:14px auto}}</style></head
 </div></body></html>"""
 
 
-def start_server(pt, port: int = 8765):
+def start_server(pt, port: int = 8765, rec=None):
     """Levanta el servidor en un hilo aparte (lo usa la app de la barra de menú).
     Devuelve una función para apagarlo."""
     loop = asyncio.new_event_loop()
-    app = make_app(pt)
+    app = make_app(pt, rec)
     app["port"] = port
     runner = web.AppRunner(app)
     ready, err = threading.Event(), []
