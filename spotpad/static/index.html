@@ -470,11 +470,20 @@ async function renderStat() {
   html += row('Última respuesta OK', h.last_ok || '—');
   if (h.last_error) html += row('Último error', `${esc(h.last_error.msg)} (${h.last_error.at})`, 'bad');
   html += row('Conexiones', h.connections);
-  html += row('Avisos de Pro Tools', esc(evStatus || '—'));
+  html += row('Avisos de Pro Tools', esc(evStatus || '—') +
+    ' <button class="hbtn" id="evTog" style="margin-left:6px">' + (evStatus === 'apagados' ? 'Prender' : 'Apagar') + '</button>');
+  html += '<div class="k2" style="margin:2px 0 8px">Los avisos y «Seguir Pro Tools» le hablan a Pro Tools todo el tiempo. Si Pro Tools se cuelga, probá con los dos apagados.</div>';
   html += '<div class="hist">' + (h.history || []).map(x =>
     `<div><span>${x.at}</span><span class="c">${esc(x.command)}</span><span>${x.ms} ms</span>${x.result === 'ok' ? '' : `<span class="e">${esc(x.result)}</span>`}</div>`
   ).join('') + '</div>';
   b.innerHTML = html;
+  const tog = $('#evTog');
+  if (tog) tog.onclick = async () => {
+    try { const r = await api('/api/settings', {method: 'PUT', body: JSON.stringify({events: evStatus === 'apagados'})});
+          toast(r.events ? 'Avisos prendidos' : 'Avisos apagados'); evStatus = r.events ? 'conectando…' : 'apagados'; }
+    catch (e) { toast(e.message, true); }
+    renderStat();
+  };
 }
 $('#conn').onclick = () => { $('#stat').showModal(); renderStat(); };
 $('#statClose').onclick = () => $('#stat').close();
@@ -937,9 +946,9 @@ $('#spotEdit').onclick = async () => {
   openPicker('Tracks de spotting', spotTracks, async ids => {
     await api('/api/spot-tracks', {method: 'PUT', body: JSON.stringify(ids)}); refreshList(); });
 };
-// Cada 8 s, solo con la lista a la vista; el badge de nuevos se actualiza cada 30 s igual
+// Cada 8 s, solo con la lista a la vista
 setInterval(() => { if (document.visibilityState === 'visible' && isList()) refreshList(); }, 8000);
-setInterval(() => { if (document.visibilityState === 'visible' && !isList()) refreshList(); }, 30000);
+// (antes también releía cada 30 s fuera de la lista: un export de toda la sesión que no hace falta)
 
 /* ---------- modo grabación ---------- */
 let rec = {items: [], sweepable: [], shoes: [], surfaces: [], fts: []}, recSt = {}, recCur = null, recTracks = [];

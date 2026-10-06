@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -63,6 +63,7 @@ SPOT_TRACKS_FILE = DATA / "spot_tracks.json"   # tracks que muestra la lista de 
 DIAG_FILE = DATA / "diag.txt"
 HIDDEN_FILE = DATA / "hidden.json"      # carpetas y tracks ocultos en la botonera (por nombre)
 RULES_FILE = DATA / "footsteps.json"    # reglas de nombres de pasos (calzados, colores, alias de superficies)
+SETTINGS_FILE = DATA / "settings.json"  # funciones en segundo plano (avisos de Pro Tools)
 REC_FILE = DATA / "rec.json"            # modo grabación: track de grabación, qué barrer, elecciones por sesión
 
 
@@ -511,7 +512,9 @@ class ProTools:
 
     def status(self):
         def f(e):
-            return {"connected": True, "session": e.session_name(), "ptsl": e.ptsl_version()}
+            if getattr(self, "_ver_for", None) is not e:      # la versión no cambia: una vez por conexión
+                self._ver, self._ver_for = e.ptsl_version(), e
+            return {"connected": True, "session": e.session_name(), "ptsl": self._ver}
         try:
             return self._call(f)
         except SpotError as err:
@@ -876,6 +879,17 @@ class ProTools:
         return self._call(f)
 
     # -- avisos (SubscribeToEvents + PollEvents por streaming) -------------------- #
+    events_enabled = False      # apagados por defecto: se prenden desde el panel de estado
+
+    def set_events(self, on: bool):
+        self.events_enabled = bool(on)
+        call = getattr(self, "_ev_call", None)
+        if not on and call is not None:
+            try:
+                call.cancel()
+            except Exception:                      # noqa: BLE001
+                pass
+
     EVENT_IDS = ("EId_SessionOpened", "EId_SessionCreated", "EId_SessionClosed", "EId_TrackNameChanged")
 
     def _raw(self, eng, command, body: dict, streaming=False):
@@ -894,6 +908,9 @@ class ProTools:
         def loop():
             from ptsl import PTSL_pb2 as pt
             while True:
+                if not self.events_enabled:
+                    bus.status = "apagados"
+                    time.sleep(2); continue
                 eng = self._engine
                 if eng is None:
                     time.sleep(2); continue
@@ -911,7 +928,7 @@ class ProTools:
                     call = self._raw(eng, pt.CId_PollEvents, {}, streaming=True)
                     self._ev_call = call
                     for resp in call:
-                        if self._engine is not eng:        # reconectamos: este stream es viejo
+                        if self._engine is not eng or not self.events_enabled:   # reconectamos o los apagaron
                             call.cancel(); break
                         body = resp.response_body_json
                         if not body:
@@ -1679,17 +1696,17 @@ class RecController:
                 return it
         # Selección sobre algo que no está en la foto: puede ser un clip nuevo → releer (como mucho cada 20 s)
         kinds = {t["name"]: naming.folder_kind(t["folder"], load_rules()) for t in self.snap["tracks"]}
-        if any(kinds.get(t) for t in sel["tracks"]) and time.time() - self._last_auto_refresh > 20:
+        if any(kinds.get(t) for t in sel["tracks"]) and time.time() - self._last_auto_refresh > 60:
             self._last_auto_refresh = time.time()
             self._last_sel = None
-            log.info("Seguir Pro Tools: clip desconocido, releo la sesión")
+            log.info("Seguir Pro Tools: clip desconocido, releo la sesión (como mucho cada 60 s)")
             try:
                 self.refresh()
             except SpotError:
                 pass
         return None
 
-    def start_follow(self, every=0.5):
+    def start_follow(self, every=1.0):
         """Hilo que revisa la selección de Pro Tools (solo hace algo si «Seguir Pro Tools» está activado)."""
         if self._follow_thread and self._follow_thread.is_alive():
             return
@@ -1931,9 +1948,28 @@ def make_app(pt, rec=None):
     # ---- Modo grabación (la lógica vive en RecController: la usan también los atajos) ---- #
     rec = rec or RecController(pt)
     rec.start_follow()
+    settings = {"events": False, **load_json(SETTINGS_FILE, {})}
+    if hasattr(pt, "set_events"):
+        pt.set_events(settings["events"])
     if not getattr(pt, "_events_started", False):
         pt._events_started = True
         pt.start_events(EVENTS)
+
+    @routes.get("/api/settings")
+    async def get_settings(_):
+        return web.json_response({"events": False, **load_json(SETTINGS_FILE, {})})
+
+    @routes.put("/api/settings")
+    async def put_settings(req):
+        body = await req.json()
+        cur = {"events": False, **load_json(SETTINGS_FILE, {})}
+        if "events" in body:
+            cur["events"] = bool(body["events"])
+            if hasattr(pt, "set_events"):
+                pt.set_events(cur["events"])
+            log.info("Avisos de Pro Tools: %s", "prendidos" if cur["events"] else "apagados")
+        SETTINGS_FILE.write_text(json.dumps(cur, indent=2), "utf-8")
+        return web.json_response(cur)
 
     async def rec_call(fn, *args):
         loop = asyncio.get_running_loop()
