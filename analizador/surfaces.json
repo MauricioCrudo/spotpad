@@ -1,0 +1,56 @@
+{
+  "_nota": "Descripciones (en inglés, como las entiende el modelo) de cada superficie. «tracks» son los nombres de track en la carpeta de superficies donde va cada una (el primero que exista en la sesión). Si cambiás los «prompts» hay que recompilar (export_model.py calcula sus embeddings); los «tracks», «label» y las reglas se pueden tocar sin recompilar.",
+  "floor_yes": [
+    "a photo of the floor",
+    "a wide shot of people walking, their feet on the ground",
+    "a full body shot of a person standing on the floor",
+    "the ground is visible"
+  ],
+  "floor_no": [
+    "a close-up of a face",
+    "a close-up of hands",
+    "a close-up of an object",
+    "a shot of the sky",
+    "a dark black frame",
+    "a medium shot of a person from the waist up"
+  ],
+  "surfaces": [
+    {"key": "clean_concrete", "label": "Clean Concrete",
+     "tracks": ["Clean Concrete", "Concrete Clean", "Clean", "Concrete"],
+     "prompts": ["a smooth polished concrete floor", "a clean tiled floor", "a marble floor inside a building",
+                 "a clean sidewalk", "an office floor with tiles"]},
+    {"key": "gritty_concrete", "label": "Gritty Concrete",
+     "tracks": ["Gritty Concrete", "Concrete Gritty", "Gritty"],
+     "prompts": ["a dirty street with sand and debris", "a rough asphalt road", "a gritty concrete floor with dirt",
+                 "an old dusty warehouse floor", "a cracked city pavement"]},
+    {"key": "hardwood", "label": "Hardwood",
+     "tracks": ["Hardwood", "Wood", "Madera"],
+     "prompts": ["a polished hardwood floor", "a wooden parquet floor in a living room", "a laminate wood floor"]},
+    {"key": "loose_wood", "label": "Loose Wood",
+     "tracks": ["Loose Wood", "Wood Loose", "Madera Floja"],
+     "prompts": ["old creaky wooden floorboards", "a wooden deck outdoors", "a rustic wooden porch",
+                 "wooden stairs", "a wooden pier"]},
+    {"key": "grass", "label": "Grass",
+     "tracks": ["Grass", "Pasto"],
+     "prompts": ["a grass lawn", "people walking on grass in a park", "a field of grass"]},
+    {"key": "gravel", "label": "Gravel",
+     "tracks": ["Gravel", "Grava", "Ripio"],
+     "prompts": ["a gravel path", "a dirt road with small stones", "a gravel driveway", "a rocky trail"]},
+    {"key": "special", "label": "Special",
+     "tracks": ["Special", "Special Surfaces", "Especial", "Especiales"],
+     "prompts": ["snow on the ground", "sand on a beach", "deep mud", "a metal grating floor", "a metal ship deck"]}
+  ],
+  "extras": [
+    {"key": "carpet", "label": "Carpet", "tracks": ["Carpet", "Alfombra"],
+     "prompts": ["a carpeted floor", "a rug on the floor"]},
+    {"key": "water", "label": "Water", "tracks": ["Water", "Agua"],
+     "prompts": ["puddles on the wet ground", "walking through shallow water", "a wet street after rain"]}
+  ],
+  "rules": {
+    "min_floor": 0.15,
+    "confident": 0.55,
+    "margin": 0.2,
+    "extra_yes": 0.6,
+    "extra_maybe": 0.45
+  }
+}

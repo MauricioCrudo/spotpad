@@ -77,6 +77,11 @@ class TcConverter:
         elapsed = int(Fraction(samples) * self.rate.real / self.sr)   # floor
         return frames_to_tc(self.start + elapsed, self.rate)
 
+    def samples(self, tc: str) -> int:
+        """TC (con la cadencia de la sesión) → samples desde el inicio de la sesión."""
+        frames = tc_to_frames(tc, self.rate) - self.start
+        return int(round(Fraction(frames) * self.sr / self.rate.real))
+
     def duration(self, samples: int) -> str:
         """Duración corta: '2.40 s'."""
         return f"{samples / self.sr:.2f} s"

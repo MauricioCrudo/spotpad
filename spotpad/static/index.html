@@ -386,7 +386,8 @@ async function poll() {
     if (evSeq === null) evSeq = s.ev_seq || 0;
     else if (s.ev_seq > evSeq && s.ev_last) {
       evSeq = s.ev_seq; const ev = s.ev_last;
-      toast('Pro Tools: ' + ev.label + (ev.data && (ev.data.session_name || ev.data.new_name) ? ' · ' + (ev.data.session_name || ev.data.new_name) : ''));
+      if (ev.id === 'SpotPad_IA') toast(ev.data.msg || 'IA');
+      else toast('Pro Tools: ' + ev.label + (ev.data && (ev.data.session_name || ev.data.new_name) ? ' · ' + (ev.data.session_name || ev.data.new_name) : ''));
       loadLayout(true);
       if (document.body.classList.contains('rec')) setTimeout(recEnter, 3000);
     }

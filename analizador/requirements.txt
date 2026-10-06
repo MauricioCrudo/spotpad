@@ -1,0 +1,6 @@
+# Analizador (lo que va dentro de la app). En Windows, onnxruntime-directml en lugar de onnxruntime (usa la GPU).
+numpy>=1.26
+pillow>=10
+imageio-ffmpeg>=0.5
+onnxruntime>=1.18; sys_platform != "win32"
+onnxruntime-directml>=1.18; sys_platform == "win32"

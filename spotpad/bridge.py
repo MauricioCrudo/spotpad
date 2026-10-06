@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import sys
@@ -27,8 +28,9 @@ from aiohttp import web
 from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 import naming
+import ai_import
 
-VERSION = "0.7.2"
+VERSION = "0.8.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -481,6 +483,70 @@ class ProTools:
             from ptsl import PTSL_pb2 as pt
             return build_layout([track_info(t, pt) for t in e.track_list()], exclude)
         return self._call(f)
+
+    # -- importar el análisis de la IA -------------------------------------- #
+    def transport(self):
+        return self._call(lambda e: e.transport_state())
+
+    def ai_context(self):
+        """Lo que hace falta para planear: tracks (carpeta, inactivo), EDL, markers y conversor de TC."""
+        def f(e):
+            from ptsl import PTSL_pb2 as pt
+            state = e.transport_state()
+            if state != "TS_TransportStopped":
+                return {"busy": state}
+            infos = [track_info(t, pt) for t in e.track_list()]
+            tops = top_folders(infos)
+            tracks = [{"id": t["id"], "name": t["name"], "folder": tops.get(t["name"], ""),
+                       "inactive": t["inactive"]} for t in infos if "Folder" not in t["type"]]
+            b = e.export_session_as_text()
+            b.include_track_edls(); b.time_type("samples"); b.dont_show_crossfades()
+            edl = parse_session_text(b.export_string())
+            tc = self._tc(e)
+            if tc is None:
+                raise SpotError("No pude leer el timecode de la sesión")
+            marks = []
+            try:
+                for m in e.get_memory_locations():
+                    st = str(m.start_time).strip()
+                    if re.fullmatch(r"\d+", st):
+                        marks.append(int(st))
+                    elif re.fullmatch(r"\d\d[:;.]\d\d[:;.]\d\d[:;.]\d\d", st):
+                        marks.append(tc.samples(st))
+            except Exception:                          # sin markers o versión vieja: seguir
+                log.exception("ia: leer markers")
+            return {"tracks": tracks, "edl": edl, "markers": marks, "tc": tc}
+        return self._call(f, timeout=60)
+
+    def ai_marker(self, name: str, tc_str: str):
+        from ptsl import PTSL_pb2 as pt
+
+        def f(e):
+            kw = dict(start_time=tc_str, name=name, time_properties=pt.TP_Marker,
+                      reference=pt.MLR_Absolute, location=pt.MarkerLocation_MainRuler)
+            try:
+                e.create_memory_location(**kw)
+            except TypeError:
+                kw.pop("location", None)
+                e.create_memory_location(**kw)
+            return {"ok": True}
+        return self._call(f)
+
+    def ai_group(self, track_name: str, start: int, end: int, name: str):
+        """Clip group de start a end (samples) en el track, con nombre."""
+        from ptsl import PTSL_pb2 as pt
+
+        def f(e):
+            target = next((t for t in e.track_list() if t.name == track_name), None)
+            if target is None:
+                raise SpotError(f"No está el track «{track_name}»")
+            e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
+                                     location_type=pt.TLType_Samples)
+            return self._group_on(e, target, name)
+        return self._call(f, timeout=20)
+
+    def track_id(self, name: str):
+        return self._call(lambda e: next((t.id for t in e.track_list() if t.name == name), None))
 
     def set_active(self, track_id: str, active: bool = True):
         """Activa/desactiva un track (o carpeta). No se sabe con certeza si `enabled` del SDK
@@ -955,6 +1021,9 @@ class MockProTools:
             ["DIAL GUIDE", "HANDS SPOT", "HANDS 1", "HANDS 2", "HANDS 3", "PROPS PAPEL"], 1)]
         self._last = "Hands grab body"
         self._off = {"t20", "t38"}      # inactivos: IA Dudas y Group (grabado completo)
+        self.ai_log, self._ai_edl, self._ai_marks, self._extra_tracks = [], {}, [], []
+        self.ai_delay = 0.0
+        self._dudas = 1                 # 0 = la sesión todavía no tiene el track IA Dudas
 
     def status(self):
         return {"connected": True, "session": "MOCK_R1_Foley", "ptsl": 0, "mock": True}
@@ -986,7 +1055,9 @@ class MockProTools:
                                    "parent_id": f"f{p}", "parent_name": "", "inactive": f"t{i}" in self._off}
         tr = [F(10, "Surfaces")] + [T(11 + k, n, 10) for k, n in enumerate(
                   ["Gritty", "Concrete Clean", "Wood", "Loose Wood", "Grass", "Gravel", "Carpet", "Water", "Special"])] + \
-             [T(20, "IA Dudas", 10)] + \
+             [T(20, "IA Dudas", 10)] * self._dudas + \
+             [{"id": f"x{k}", "name": n, "index": 21 + k, "type": "TT_Audio", "color": "", "parent_id": "f10",
+               "parent_name": "", "inactive": f"x{k}" in self._off} for k, n in enumerate(self._extra_tracks)] + \
              [F(30, "Footsteps"), T(31, "Henry", 30, "#3E9B4F"), T(32, "Sonia", 30, "#C9567A"),
               T(33, "Male Shoes", 30, "#3E9B4F"), T(34, "Femme Shoes", 30, "#C9567A"), T(35, "Sneakers", 30, "#3B7DD8"),
               T(36, "Boots", 30, "#8A5A2B"), T(37, "Barefoot", 30), T(38, "Group", 30)] + \
@@ -996,6 +1067,46 @@ class MockProTools:
                    "Papers", "Tableware", "Props 1", "Props 2"])]
         tr[[t["id"] for t in tr].index("f51")]["parent_id"] = "f50"
         return build_layout(tr, exclude)
+
+    # -- IA (mock): guarda lo que haría en self.ai_log y suma los clips a su EDL -- #
+    def transport(self):
+        return "TS_TransportStopped"
+
+    def _mock_tc(self):
+        return TcConverter(48000, "00:59:58:00", rate_from_enum("STCR_Fps24"))
+
+    def ai_context(self):
+        from edl import EdlEvent
+        lay = self.layout()
+        ids = {t["id"] for tab in lay["tabs"] for g in tab["groups"] for t in g["tracks"]}
+        tracks = [{"id": t["id"], "name": t["name"], "folder": tab["name"], "inactive": False}
+                  for tab in lay["tabs"] for g in tab["groups"] for t in g["tracks"]]
+        for g in lay["inactive"]:
+            for t in g["tracks"]:
+                if t["id"] not in ids and not t["folder"]:
+                    tracks.append({"id": t["id"], "name": t["name"], "folder": g["name"].split(" › ")[0],
+                                   "inactive": True})
+        edl = {k: [EdlEvent(k, c, a, b) for c, a, b in v] for k, v in self._ai_edl.items()}
+        return {"tracks": tracks, "edl": edl, "markers": list(self._ai_marks), "tc": self._mock_tc()}
+
+    def ai_marker(self, name, tc_str):
+        self.ai_log.append(("marker", name, tc_str))
+        self._ai_marks.append(self._mock_tc().samples(tc_str))
+        return {"ok": True}
+
+    def ai_group(self, track_name, start, end, name):
+        names = {t["name"]: t for t in self.ai_context()["tracks"]}
+        if track_name not in names:
+            raise SpotError(f"No está el track «{track_name}»")
+        if names[track_name]["inactive"]:
+            raise SpotError(f"«{track_name}» está inactivo")
+        self.ai_log.append(("group", track_name, start, end, name))
+        self._ai_edl.setdefault(track_name, []).append((name, start, end))
+        time.sleep(self.ai_delay)
+        return {"ok": True}
+
+    def track_id(self, name):
+        return next((t["id"] for t in self.ai_context()["tracks"] if t["name"] == name), None)
 
     def set_active(self, track_id, active=True):
         if active:
@@ -1090,7 +1201,8 @@ class MockProTools:
         return {"ok": True, "colors": ["#ff3E9B4F", "#ffC9567A", "#ff3B7DD8", "#ff8A5A2B", "#ffE8A33D", "#ff7c0089"]}
 
     def create_track(self, name, after_track, color_index=-1):
-        return {"ok": True, "msg": f"Track «{name}» creado (mock)", "track": name}
+        self._extra_tracks.append(name.strip())         # aparece en la carpeta de superficies
+        return {"ok": True, "msg": f"Track «{name}» creado (mock)", "track": name.strip()}
 
     def add_marker(self, name, color_index=-1):
         return {"ok": True, "msg": f"Marcador «{name}» (mock)"}
@@ -1121,6 +1233,7 @@ def load_json(path, default):
 #  Avisos de Pro Tools (Event System del SDK, desde Pro Tools 2025.06)
 # --------------------------------------------------------------------------- #
 EVENT_LABELS = {
+    "SpotPad_IA": "IA",
     "EId_SessionOpened": "Se abrió la sesión",
     "EId_SessionCreated": "Se creó una sesión",
     "EId_SessionClosed": "Se cerró la sesión",
@@ -1156,6 +1269,142 @@ class EventBus:
 
 
 EVENTS = EventBus()
+
+
+# --------------------------------------------------------------------------- #
+class AiJob:
+    """Marca la sesión con el resultado del analizador, en segundo plano y con progreso.
+    Markers por escena, superficies seguras en su track y dudas en «IA Dudas» (que queda inactivo)."""
+    LAST_FILE = DATA / "ia_ultimo.json"
+
+    def __init__(self, pt):
+        self.pt = pt
+        self.lock = threading.Lock()
+        self.state = {"running": False, "phase": "", "done": 0, "total": 0, "msg": "", "errors": [],
+                      "summary": None, "plan": None}
+        self._cancel = False
+
+    def status(self):
+        with self.lock:
+            return json.loads(json.dumps(self.state))
+
+    def _set(self, **kw):
+        with self.lock:
+            self.state.update(kw)
+
+    def cancel(self):
+        self._cancel = True
+        return {"ok": True}
+
+    @staticmethod
+    def check(result):
+        if not isinstance(result, dict) or result.get("kind") != "spotpad-analisis":
+            raise SpotError("Eso no es un análisis de SpotPad")
+        if not result.get("scenes"):
+            raise SpotError("El análisis no tiene escenas")
+
+    def make_plan(self, result, opts):
+        ctx = self.pt.ai_context()
+        if ctx.get("busy"):
+            raise SpotError("Pro Tools está reproduciendo o grabando: frenalo y probá de nuevo")
+        p = ai_import.plan(result, ctx["tracks"], ctx["edl"], ctx["markers"], ctx["tc"].samples,
+                           opts, load_rules())
+        return ctx, p
+
+    def preview(self, result, opts):
+        self.check(result)
+        _ctx, p = self.make_plan(result, opts)
+        return {"ok": True, **{k: p[k] for k in ("summary", "skipped", "notes")}}
+
+    def start(self, result, opts):
+        self.check(result)
+        with self.lock:
+            if self.state["running"]:
+                raise SpotError("Ya estoy marcando un análisis")
+            self.state.update(running=True, phase="Preparando", done=0, total=0, msg="", errors=[],
+                              summary=None, plan=None)
+        self._cancel = False
+        try:
+            self.LAST_FILE.write_text(json.dumps(result, ensure_ascii=False), "utf-8")
+        except OSError:
+            pass
+        threading.Thread(target=self._run, args=(result, opts), daemon=True, name="ia").start()
+        return {"ok": True}
+
+    def _run(self, result, opts):
+        try:
+            self._apply(result, opts)
+        except Exception as ex:                    # noqa: BLE001
+            log.exception("ia")
+            self._set(msg=f"Error: {ex}", phase="Error")
+            EVENTS.push("SpotPad_IA", {"msg": f"No pude terminar de marcar: {ex}"})
+        finally:
+            self._set(running=False)
+
+    def _wait_stopped(self):
+        while not self._cancel:
+            st = self.pt.transport()
+            if st == "TS_TransportStopped":
+                return
+            self._set(phase="En pausa: Pro Tools está reproduciendo")
+            time.sleep(1.5)
+
+    def _apply(self, result, opts):
+        ctx, p = self.make_plan(result, opts)
+        acts = p["actions"]
+        self._set(plan=p["summary"], total=len(acts), phase="Marcando",
+                  msg="; ".join(p["notes"]))
+        log.info("IA: %s", p["summary"])
+        doubt = ai_import.DOUBT_TRACK
+        uses_doubt = any(a.get("doubt") for a in acts)
+        if uses_doubt:
+            if not p["doubt_track_exists"]:
+                surf = [t["name"] for t in ctx["tracks"]
+                        if naming.folder_kind(t["folder"], load_rules()) == "surfaces"]
+                r = self.pt.create_track(doubt, surf[-1])
+                doubt = r.get("track") or doubt
+                for a in acts:
+                    if a.get("doubt"):
+                        a["track"] = doubt
+            elif p["doubt_track_inactive"]:
+                self.pt.set_active(self.pt.track_id(doubt), True)
+        errors, streak, done = [], 0, 0
+        try:
+            for i, a in enumerate(acts):
+                if self._cancel:
+                    self._set(phase="Cancelado")
+                    break
+                if i % 10 == 0:
+                    self._wait_stopped()
+                try:
+                    if a["op"] == "marker":
+                        self.pt.ai_marker(a["name"], a["tc"])
+                    else:
+                        self.pt.ai_group(a["track"], a["start"], a["end"], a["name"])
+                    streak = 0
+                    done += 1
+                except SpotError as ex:
+                    errors.append(f"Esc {a.get('scene')}: {ex}")
+                    streak += 1
+                    if streak >= 3:
+                        self._set(phase="Frenado: 3 errores seguidos")
+                        break
+                self._set(done=i + 1, errors=errors[-20:])
+        finally:
+            if uses_doubt:
+                try:
+                    tid = self.pt.track_id(doubt)
+                    if tid:
+                        self.pt.set_active(tid, False)
+                except SpotError as ex:
+                    errors.append(f"No pude desactivar «{doubt}»: {ex}")
+        s = p["summary"]
+        msg = (f"IA: {s['markers']} markers, {s['surfaces']} superficies y {s['doubts']} dudas"
+               + (f" ({s['skipped']} salteadas)" if s["skipped"] else "")
+               + (f" · {len(errors)} errores" if errors else ""))
+        self._set(summary=s, msg=msg, errors=errors[-20:],
+                  phase="Cancelado" if self._cancel else ("Listo" if not errors else "Listo con errores"))
+        EVENTS.push("SpotPad_IA", {"msg": msg})
 
 
 # --------------------------------------------------------------------------- #
@@ -1709,6 +1958,42 @@ def make_app(pt, rec=None):
     @routes.get("/api/palette")
     async def palette(_):
         return await run(pt.color_palette)
+
+    # ---- Análisis de la IA (lo manda el analizador, desde esta u otra computadora) ---- #
+    ai = AiJob(pt)
+
+    async def _ai_body(req):
+        try:
+            b = await req.json()
+        except Exception:
+            raise SpotError("El análisis no es un JSON válido")
+        res = b.get("result", b)
+        opts = {k: bool(v) for k, v in (b.get("options") or {}).items() if k in ("markers", "surfaces")}
+        return res, opts
+
+    @routes.post("/api/ai/preview")
+    async def ai_preview(req):
+        try:
+            res, opts = await _ai_body(req)
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return await run(ai.preview, res, opts)
+
+    @routes.post("/api/ai/apply")
+    async def ai_apply(req):
+        try:
+            res, opts = await _ai_body(req)
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return await run(ai.start, res, opts)
+
+    @routes.get("/api/ai/status")
+    async def ai_status(_):
+        return web.json_response(ai.status())
+
+    @routes.post("/api/ai/cancel")
+    async def ai_cancel(_):
+        return web.json_response(ai.cancel())
 
     @routes.post("/api/track/active")
     async def track_active(req):

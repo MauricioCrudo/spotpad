@@ -10,3 +10,6 @@ spotpad/spot_tracks.json
 spotpad/diag.txt
 spotpad/spotpad.log
 spotpad/.first_run_done
+spotpad/ia_ultimo.json
+analizador/modelo/
+analizador/build_icon.png

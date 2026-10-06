@@ -1,0 +1,8 @@
+# Solo para preparar el modelo (export_model.py), no va en la app
+torch
+transformers>=4.45
+sentencepiece
+protobuf
+onnx
+onnxruntime
+numpy

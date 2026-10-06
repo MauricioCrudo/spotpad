@@ -68,6 +68,9 @@ Imprime la sesión, el timecode, la selección, **todos los tracks con su carpet
 - **+ Track** (en ✎ Editar, dentro de una carpeta): crea un track mono al final de esa carpeta, con el color que elijas de la paleta de Pro Tools.
 - **✎ en la Lista** (y "renombrar el clip de spotting" en Grabar): cambia el nombre del clip group en Pro Tools. SpotPad lo selecciona y lo renombra, así no se confunde con otros clips del mismo nombre.
 
+## Superficies automáticas (analizador)
+El **SpotPad Analizador** (app aparte, en la misma página de descargas; ver `analizador/README.md`) mira el capítulo en tu computadora, sin subir nada, y le manda el resultado a SpotPad por la red local. SpotPad marca la sesión abierta: un marker por escena, la superficie de cada escena en su track de SUPERFICIES y las dudas en el track **«IA Dudas»**, que crea si hace falta y deja inactivo (pestaña **Inactivos**). Al terminar aparece un aviso en el iPad.
+
 ## Avisos de Pro Tools
 Con Pro Tools 2025.06 o posterior, SpotPad recibe avisos cuando se abre, se crea o se cierra una sesión (y, desde 2026.04, cuando se renombra un track). Las carpetas y la sesión del modo Grabar se recargan solas y el iPad muestra el aviso. El estado de los avisos se ve en el panel de Estado.
 
