@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -163,6 +163,34 @@ def setup_logging(debug=False, console=True):
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)   # sin una línea por cada pedido del iPad
 
 
+def compact_log(lines):
+    """Registro legible para el informe: cada traceback se reduce a su error (pegado a la línea que lo
+    anotó) y los mensajes repetidos seguidos se juntan («× 12»), así lo importante no se pierde."""
+    import re
+    stamp = re.compile(r"^\d{4}-\d\d-\d\d [\d:,]+ ")
+    merged, tb, got = [], False, False
+    for ln in lines:
+        if ln.startswith("Traceback (most recent call last)"):
+            tb, got = True, False; continue
+        if tb and not stamp.match(ln):
+            if (not got and ln.strip() and not ln.startswith((" ", "\t"))
+                    and not ln.startswith(("The above exception", "During handling"))):
+                got = True
+                if merged:
+                    merged[-1] += "  ↳ " + ln[:160]
+            continue
+        tb = False
+        merged.append(ln)
+    out = []
+    for ln in merged:
+        key = stamp.sub("", ln)
+        if out and out[-1][1] == key:
+            out[-1][2] += 1
+        else:
+            out.append([ln, key, 1])
+    return [ln + (f"   (× {n})" if n > 1 else "") for ln, _k, n in out]
+
+
 def build_report(pt) -> str:
     """Todo lo necesario para diagnosticar un problema, en un solo texto para copiar y pegar."""
     import platform
@@ -181,8 +209,8 @@ def build_report(pt) -> str:
     else:
         out += ["## Diagnóstico de la sesión", "Salteado: Pro Tools tiene un pedido sin contestar.", ""]
     try:
-        lines = LOG_FILE.read_text("utf-8", errors="replace").splitlines()[-150:]
-        out += ["## Registro (últimas 150 líneas)", *lines]
+        lines = compact_log(LOG_FILE.read_text("utf-8", errors="replace").splitlines())[-250:]
+        out += ["## Registro (últimas 250 líneas, sin repeticiones)", *lines]
     except FileNotFoundError:
         out += ["## Registro", "(vacío)"]
     return "\n".join(out)
@@ -284,7 +312,9 @@ class ProTools:
 
     TIMEOUT = 10        # segundos que esperamos a Pro Tools antes de darlo por ocupado
     RETRY_AFTER = 15    # después de un cuelgue, cada cuánto probamos con una conexión nueva
-    BUSY = "Pro Tools no responde. ¿Hay una ventana o diálogo abierto en Pro Tools?"
+    DEAD_AFTER = 180    # recién después de 3 min sin respuesta pedimos reiniciar Pro Tools
+    BUSY = ("Pro Tools no responde. ¿Está abriendo o guardando una sesión, o hay una ventana o diálogo "
+            "abierto en Pro Tools?")
     DEAD = ("Pro Tools dejó de aceptar conexiones del SDK. Guardá, cerrá y volvé a abrir Pro Tools; "
             "SpotPad se reconecta solo.")
 
@@ -302,6 +332,8 @@ class ProTools:
         self._last_ok = None                # cuándo contestó bien por última vez
         self._connections = 0               # cuántas veces conectamos
         self._connect_fails = 0             # intentos de conexión seguidos sin respuesta
+        self._silent_since = None           # desde cuándo Pro Tools no contesta nada
+        self._quiet = None                  # último aviso repetitivo anotado (para no llenar el registro)
 
     # -- conexión ---------------------------------------------------------- #
     def _eng(self):
@@ -317,6 +349,8 @@ class ProTools:
             self._track_commands(eng)
             self._connections += 1
             self._connect_fails = 0
+            self._silent_since = None
+            self._quiet = None
             log.info("PTSL: conectado (conexión #%s)", self._connections)
             self._engine = eng
         return self._engine
@@ -344,6 +378,7 @@ class ProTools:
                 self._inflight = None
             self._history.append((t0, name, time.time() - t0, "ok"))
             self._last_ok = time.time()
+            self._silent_since = None
             return r
         client.run = run
 
@@ -361,15 +396,31 @@ class ProTools:
             elif "InProgress" in msg:
                 log.info("PTSL: Pro Tools ocupado (respuesta InProgress)")
                 err = "Pro Tools está ocupado (¿abriendo o guardando la sesión?). Probá de nuevo en un momento."
+            elif "UNAVAILABLE" in msg or "failed to connect" in msg.lower():
+                # Pro Tools cerrado: una línea en el registro (no un traceback cada 4 s)
+                self._engine = None
+                self._note_once("PTSL: Pro Tools no está abierto (el SDK rechaza la conexión)")
+                err = "No encuentro Pro Tools (¿está abierto?)"
+            elif "Failed to load JSON" in msg or "ParseError" in type(e).__name__:
+                self._engine = None
+                self._note_once("PTSL: Pro Tools está arrancando (todavía no acepta conexiones)")
+                err = "Pro Tools está arrancando, esperá un momento"
             else:
                 log.exception("PTSL")
-                if "UNAVAILABLE" in msg or "failed to connect" in msg.lower():
-                    self._engine = None
-                    err = "No encuentro Pro Tools (¿está abierto?)"
-                else:
-                    err = msg.splitlines()[0][:200]
+                err = msg.splitlines()[0][:200]
             self._last_error = (err, time.time())
             raise SpotError(err)
+
+    def _note_once(self, line):
+        if self._quiet != line:
+            self._quiet = line
+            log.info(line)
+
+    def _dead(self):
+        """Reiniciar Pro Tools solo si conectar se colgó varias veces Y hace rato que no contesta nada
+        (mientras abre una sesión grande también deja de contestar, y eso no es estar colgado)."""
+        return (self._connect_fails >= 2 and self._silent_since is not None
+                and time.monotonic() - self._silent_since >= self.DEAD_AFTER)
 
     def _call(self, fn, timeout=None):
         """Corre fn(engine) en el hilo de Pro Tools, sin dejar que un pedido colgado
@@ -380,7 +431,7 @@ class ProTools:
             if self._stuck is not None:
                 fut0, since = self._stuck
                 if not fut0.done() and time.monotonic() - since < self.RETRY_AFTER:
-                    raise SpotError(self.DEAD if self._connect_fails >= 2 else self.BUSY)
+                    raise SpotError(self.DEAD if self._dead() else self.BUSY)
                 if not fut0.done():
                     # Pedido colgado: lo abandonamos y probamos con una conexión nueva
                     log.warning("PTSL: abandono el pedido colgado y reconecto")
@@ -409,11 +460,15 @@ class ProTools:
         except FutTimeout:
             with self._guard:
                 self._stuck = (fut, time.monotonic())
+                if self._silent_since is None:
+                    self._silent_since = time.monotonic()
             cmd = self._inflight[0] if self._inflight else "?"
-            log.warning("PTSL: Pro Tools no respondió en %ss (comando: %s)", timeout or self.TIMEOUT, cmd)
+            who = getattr(fn, "__qualname__", "?").split(".<locals>")[0]
+            log.warning("PTSL: Pro Tools no respondió en %ss (comando: %s, pedido por: %s)",
+                        timeout or self.TIMEOUT, cmd, who)
             if cmd == "Conectar con Pro Tools":
                 self._connect_fails += 1
-            msg = self.DEAD if self._connect_fails >= 2 else self.BUSY
+            msg = self.DEAD if self._dead() else self.BUSY
             self._last_error = (f"{msg} (comando: {cmd})", time.time())
             raise SpotError(msg)
 
@@ -444,7 +499,8 @@ class ProTools:
         return {
             "connected_once": self._connections > 0,
             "connections": self._connections,
-            "needs_pt_restart": self._connect_fails >= 2,
+            "needs_pt_restart": self._dead(),
+            "silent_for": round(time.monotonic() - self._silent_since) if self._silent_since else 0,
             "stuck": stuck,
             "inflight": inflight,
             "last_ok": fmt(self._last_ok),

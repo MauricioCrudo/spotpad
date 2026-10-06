@@ -97,6 +97,7 @@ assert "e.get_edit_selection(" not in src, "volvió GetEditSelection al código"
 class Dead(ProTools):
     TIMEOUT = 0.3
     RETRY_AFTER = 0
+    DEAD_AFTER = 0.5
     def __init__(self):
         super().__init__(); self.ev = threading.Event()
     def _eng(self):
@@ -109,11 +110,29 @@ for _ in range(2):
         pd._call(lambda e: None)
     except SpotError as e:
         msgs.append(str(e))
+assert "abriendo" in msgs[0], msgs           # al principio: ocupado, no «reiniciá»
+time.sleep(0.6)
+try:
+    pd._call(lambda e: None)
+except SpotError as e:
+    msgs.append(str(e))
 assert "reiniciar" in msgs[-1].lower() or "volvé a abrir" in msgs[-1], msgs
 assert pd.health()["needs_pt_restart"]
 assert not pd.reconnect()["ok"]          # con un intento de conexión en curso, no apila otro
 pd.ev.set()
 print("edit-selection/dead OK")
+
+# --- Informe: tracebacks a una línea y repeticiones juntas ---
+from bridge import compact_log
+raw = ["2026-10-06 12:17:15,295 PTSL", "Traceback (most recent call last):", '  File "x.py", line 1', "    y()",
+       "grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:",
+       "\tstatus = StatusCode.UNAVAILABLE", ">",
+       "2026-10-06 12:17:19,295 PTSL", "Traceback (most recent call last):", '  File "x.py", line 1',
+       "grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:", "\tstatus = StatusCode.UNAVAILABLE", ">",
+       "2026-10-06 12:17:58,827 PTSL: conectado (conexión #2)"]
+c = compact_log(raw)
+assert len(c) == 2 and "PTSL  ↳ grpc" in c[0] and c[0].endswith("(× 2)") and "conectado" in c[-1], c
+print("informe OK")
 
 # --- Botón de carpeta: mover la selección al track y verificar antes de agrupar ---
 class T:
