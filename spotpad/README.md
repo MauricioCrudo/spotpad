@@ -62,6 +62,14 @@ python3 bridge.py --diag
 ```
 Imprime la sesión, el timecode, la selección, **todos los tracks con su carpeta y color**, cómo quedaría la botonera y las primeras líneas del export de EDL. Lo guarda también en `diag.txt`. Antes de correrlo, marcá una región sobre algún clip group y seleccioná ese track, así el export muestra algo.
 
+## Spotting desde el iPad
+- **⚑ Escena** (arriba de la botonera): marcador en el inicio de la selección de Pro Tools, con nombre y color.
+- **+ Track** (en ✎ Editar, dentro de una carpeta): crea un track mono al final de esa carpeta, con el color que elijas de la paleta de Pro Tools.
+- **✎ en la Lista** (y "renombrar el clip de spotting" en Grabar): cambia el nombre del clip group en Pro Tools. SpotPad lo selecciona y lo renombra, así no se confunde con otros clips del mismo nombre.
+
+## Avisos de Pro Tools
+Con Pro Tools 2025.06 o posterior, SpotPad recibe avisos cuando se abre, se crea o se cierra una sesión (y, desde 2026.04, cuando se renombra un track). Las carpetas y la sesión del modo Grabar se recargan solas y el iPad muestra el aviso. El estado de los avisos se ve en el panel de Estado.
+
 ## Categorías de genéricos (botones preseteados)
 Pestañas con borde punteado (p. ej. *Manos*). Cada botón crea un clip group con su nombre **en su track destino**: *Hands clap* → track **Hands Body**, *Hands surface wood* → **Hands Surfaces**. Si un botón no tiene track, lo crea en el track que esté seleccionado. Abajo de cada botón se ve a dónde va (en rojo si ese track no existe en la sesión abierta).
 
@@ -104,6 +112,9 @@ Para el grabador: barre el spotting clip por clip y deja el track de grabación 
   - **Superficie**: el clip de la carpeta de superficies que está debajo del paso. Si hay dos (**choque**), aparecen dos botones grandes para elegir; queda guardado.
   - Si no se puede deducir el calzado, lo pregunta una vez y lo recuerda para ese personaje.
 - **⚙ Reglas de pasos**: cómo se interpretó cada track, calzado fijo por personaje y nombre corto de cada superficie (*Gritty Concrete Street* → *Gritty*). Se guardan en `footsteps.json`.
+
+### Seguir Pro Tools
+Con **Seguir Pro Tools** activado (pestaña Grabar), hacer clic en un clip de spotting en Pro Tools alcanza: el iPad muestra ese clip y, si «Renombrar el track» está activado, el track de grabación toma su nombre. No hace falta tocar ninguna tecla. Funciona también con clips de tracks que no estás barriendo. Si hacés clic en un clip nuevo que SpotPad todavía no conoce, relee la sesión sola (como mucho cada 20 s). Mientras Pro Tools graba o reproduce no hace nada, y nunca renombra el track durante una grabación.
 
 ### Atajos de teclado (desde Pro Tools, sin tocar el iPad)
 Funcionan con Pro Tools en primer plano:

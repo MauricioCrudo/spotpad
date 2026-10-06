@@ -28,7 +28,7 @@ from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 import naming
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -194,6 +194,17 @@ def track_name_for(prefix: str, clip: str) -> str:
     return f"{prefix} {clip}"
 
 log = logging.getLogger("spotpad")
+
+
+def _op(name):
+    """Operación de py-ptsl por nombre; si la librería no la trae (comandos nuevos del SDK),
+    se arma igual: Operation deduce request/response del nombre."""
+    from ptsl import ops
+    cls = getattr(ops, name, None)
+    if cls is None:
+        from ptsl.ops.operation import Operation
+        cls = type(name, (Operation,), {})
+    return cls
 
 
 def track_info(t, pt=None) -> dict:
@@ -701,12 +712,165 @@ class ProTools:
             return {"tracks": [t.name for t in sorted(cand, key=lambda t: t.index)], "in": a, "out": b}
         return self._call(f)
 
+    # -- avisos (SubscribeToEvents + PollEvents por streaming) -------------------- #
+    EVENT_IDS = ("EId_SessionOpened", "EId_SessionCreated", "EId_SessionClosed", "EId_TrackNameChanged")
+
+    def _raw(self, eng, command, body: dict, streaming=False):
+        from ptsl import PTSL_pb2 as pt
+        hdr = pt.RequestHeader(task_id="", session_id=eng.client.session_id, command=command, version=2025)
+        try:
+            hdr.version_minor = 6
+        except Exception:                          # noqa: BLE001
+            pass
+        req = pt.Request(header=hdr, request_body_json=json.dumps(body))
+        stub = eng.client.raw_client
+        return stub.SendGrpcStreamingRequest(req) if streaming else stub.SendGrpcRequest(req, timeout=5)
+
+    def start_events(self, bus):
+        """Hilo que escucha los avisos de Pro Tools. Si Pro Tools es anterior a 2025.06 o falla, queda inactivo."""
+        def loop():
+            from ptsl import PTSL_pb2 as pt
+            while True:
+                eng = self._engine
+                if eng is None:
+                    time.sleep(2); continue
+                try:
+                    ok = []
+                    for eid in self.EVENT_IDS:
+                        r = self._raw(eng, pt.CId_SubscribeToEvents, {"events": [{"event_id": eid}]})
+                        if r.header.status == pt.Completed:
+                            ok.append(eid)
+                    if not ok:
+                        bus.status = "Pro Tools no ofrece avisos (hace falta 2025.06 o posterior)"
+                        time.sleep(60); continue
+                    bus.status = "activos: " + ", ".join(EVENT_LABELS[e] for e in ok)
+                    log.info("Avisos: %s", bus.status)
+                    call = self._raw(eng, pt.CId_PollEvents, {}, streaming=True)
+                    self._ev_call = call
+                    for resp in call:
+                        if self._engine is not eng:        # reconectamos: este stream es viejo
+                            call.cancel(); break
+                        body = resp.response_body_json
+                        if not body:
+                            continue
+                        try:
+                            ev = json.loads(body).get("event") or {}
+                            data = json.loads(ev.get("event_data_json") or "{}")
+                        except ValueError:
+                            continue
+                        if ev.get("event_id"):
+                            bus.push(ev["event_id"], data)
+                except Exception as e:                     # noqa: BLE001
+                    bus.status = "reintentando"
+                    log.debug("Avisos: %s", e)
+                time.sleep(3)
+        threading.Thread(target=loop, daemon=True, name="events").start()
+
+    def follow_selection(self):
+        """Lectura liviana para «Seguir Pro Tools»: tracks seleccionados + rango (sin leer toda la lista)."""
+        from ptsl import PTSL_pb2 as pt
+
+        def f(e):
+            state = e.transport_state()
+            if state != "TS_TransportStopped":          # grabando/reproduciendo: no tocar nada
+                return {"tracks": [], "in": 0, "out": 0, "state": state}
+            flt = [pt.TrackListInvertibleFilter(filter=pt.TLFilter_Selected, is_inverted=False)]
+            tracks = e.track_list(filters=flt)
+            if not tracks:
+                return {"tracks": [], "in": 0, "out": 0}
+            a, b = self._selection_samples(e)
+            return {"tracks": [t.name for t in sorted(tracks, key=lambda t: t.index)], "in": a, "out": b}
+        return self._call(f, timeout=5)
+
+    def rename_clip_at(self, track: str, start: int, end: int, new_name: str):
+        """Renombra el clip group que está en [start, end) del track: lo selecciona y usa RenameSelectedClip.
+        (RenameTargetClip va por nombre y hay muchos clips con el mismo nombre en el spotting.)"""
+        from ptsl import PTSL_pb2 as pt
+
+        def f(e):
+            e.select_tracks_by_name([track])
+            e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
+                                     location_type=pt.TLType_Samples)
+            if self._selection_samples(e) != (int(start), int(end)):
+                raise SpotError("No pude seleccionar ese clip en Pro Tools (¿Link Track and Edit Selection?)")
+            e.rename_selected_clip(new_name=new_name.strip(), rename_file=False, clip_location=pt.CL_Timeline)
+            return {"ok": True, "msg": f"Clip renombrado: «{new_name.strip()}»"}
+        return self._call(f)
+
+    def color_palette(self):
+        def f(e):
+            from ptsl import ops
+            from ptsl import PTSL_pb2 as pt
+            op = _op('CId_GetColorPalette')(color_palette_target=pt.CPTarget_Tracks)
+            e.client.run(op)
+            return {"ok": True, "colors": list(op.response.color_list)}
+        return self._call(f)
+
+    def create_track(self, name: str, after_track: str, color_index: int = -1):
+        """Crea un track mono de audio justo después de after_track (queda en su carpeta) y le pone color."""
+        from ptsl import PTSL_pb2 as pt
+        from ptsl import ops
+
+        def f(e):
+            op = _op('CId_CreateNewTracks')(number_of_tracks=1, track_name=name.strip(), track_format=pt.TF_Mono,
+                                         track_type=pt.TT_Audio, track_timebase=pt.TTB_Samples,
+                                         insertion_point_position=pt.TIPoint_After,
+                                         insertion_point_track_name=after_track)
+            e.client.run(op)
+            created = list(getattr(op.response, "created_track_names", []) or []) or [name.strip()]
+            if color_index is not None and int(color_index) >= 0:
+                self._paint(e, created, int(color_index))
+            return {"ok": True, "msg": f"Track «{created[0]}» creado", "track": created[0]}
+        return self._call(f)
+
+    _color_offset = None        # si el índice de color de Pro Tools arranca en 0 o en 1 (se aprende al pintar)
+
+    def _paint(self, e, track_names, i):
+        """Pinta con el color i de la paleta y verifica leyendo el color que quedó; si quedó corrido, corrige."""
+        from ptsl import ops
+        from ptsl import PTSL_pb2 as pt
+        pal_op = _op('CId_GetColorPalette')(color_palette_target=pt.CPTarget_Tracks)
+        e.client.run(pal_op)
+        pal = [c.lower() for c in pal_op.response.color_list]
+        off = self._color_offset or 0
+        e.client.run(_op('CId_SetTrackColor')(track_names=track_names, color_index=i + off))
+        if self._color_offset is None and pal:
+            got = next((t.color.lower() for t in e.track_list() if t.name == track_names[0]), "")
+            if got and 0 <= i < len(pal) and got != pal[i] and got in pal:
+                self._color_offset = i - pal.index(got)
+                log.info("Colores: Pro Tools usa índices corridos en %s, corrijo", self._color_offset)
+                e.client.run(_op('CId_SetTrackColor')(track_names=track_names, color_index=i + self._color_offset))
+            elif got:
+                self._color_offset = 0
+
+    def add_marker(self, name: str, color_index: int = -1):
+        """Marcador en el inicio de la selección actual (regla principal), con color opcional."""
+        from ptsl import PTSL_pb2 as pt
+
+        def f(e):
+            a, _b = self._selection_samples(e)
+            tc = self._tc(e)
+            start = tc(a) if tc else str(a)
+            kw = dict(start_time=start, name=name.strip(), time_properties=pt.TP_Marker,
+                      reference=pt.MLR_Absolute, location=pt.MarkerLocation_MainRuler)
+            if color_index is not None and int(color_index) >= 0:
+                kw["color_index"] = int(color_index) + (self._color_offset or 0)
+            try:
+                e.create_memory_location(**kw)
+            except TypeError:                # versiones de py-ptsl sin «location»
+                kw.pop("location", None)
+                e.create_memory_location(**kw)
+            return {"ok": True, "msg": f"Marcador «{name.strip()}» en {start}"}
+        return self._call(f)
+
     def rec_go(self, start: int, end: int, rec_track_id: str, name: str, locate: bool = True):
         """Posiciona Pro Tools en el clip y renombra el track de grabación."""
         from ptsl import PTSL_pb2 as pt
 
         def f(e):
             notes = []
+            if name and "Recording" in e.transport_state():
+                raise SpotError("Pro Tools está grabando: no renombro el track ahora")
             if locate:
                 e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
                                          location_type=pt.TLType_Samples)
@@ -860,6 +1024,26 @@ class MockProTools:
     def rec_selection(self):
         return {"tracks": ["Henry"], "in": 36 * 48000, "out": 37 * 48000}
 
+    mock_sel = {"tracks": [], "in": 0, "out": 0}
+
+    def start_events(self, bus):
+        bus.status = "activos (mock)"
+
+    def follow_selection(self):
+        return dict(self.mock_sel)
+
+    def rename_clip_at(self, track, start, end, new_name):
+        return {"ok": True, "msg": f"Clip renombrado: «{new_name}» (mock)"}
+
+    def color_palette(self):
+        return {"ok": True, "colors": ["#ff3E9B4F", "#ffC9567A", "#ff3B7DD8", "#ff8A5A2B", "#ffE8A33D", "#ff7c0089"]}
+
+    def create_track(self, name, after_track, color_index=-1):
+        return {"ok": True, "msg": f"Track «{name}» creado (mock)", "track": name}
+
+    def add_marker(self, name, color_index=-1):
+        return {"ok": True, "msg": f"Marcador «{name}» (mock)"}
+
     def rec_go(self, start, end, rec_track_id, name, locate=True):
         if not rec_track_id:
             return {"ok": True, "msg": "Posicionado (mock) · sin track de grabación elegido"}
@@ -883,18 +1067,72 @@ def load_json(path, default):
 
 
 # --------------------------------------------------------------------------- #
-#  Modo grabación: estado compartido por la API (iPad) y los atajos de teclado
+#  Avisos de Pro Tools (Event System del SDK, desde Pro Tools 2025.06)
+# --------------------------------------------------------------------------- #
+EVENT_LABELS = {
+    "EId_SessionOpened": "Se abrió la sesión",
+    "EId_SessionCreated": "Se creó una sesión",
+    "EId_SessionClosed": "Se cerró la sesión",
+    "EId_TrackNameChanged": "Track renombrado",
+}
+
+
+class EventBus:
+    def __init__(self):
+        from collections import deque
+        self.seq = 0
+        self.items = deque(maxlen=50)
+        self.listeners = []
+        self.lock = threading.Lock()
+        self.status = "inactivos"
+
+    def push(self, event_id: str, data=None):
+        with self.lock:
+            self.seq += 1
+            ev = {"seq": self.seq, "at": time.strftime("%H:%M:%S"), "id": event_id,
+                  "label": EVENT_LABELS.get(event_id, event_id.replace("EId_", "")), "data": data or {}}
+            self.items.append(ev)
+        log.info("Aviso de Pro Tools: %s %s", ev["label"], json.dumps(ev["data"], ensure_ascii=False)[:200])
+        for fn in list(self.listeners):
+            try:
+                fn(ev)
+            except Exception:                      # noqa: BLE001
+                log.exception("listener de avisos")
+
+    def since(self, seq: int):
+        with self.lock:
+            return [e for e in self.items if e["seq"] > seq]
+
+
+EVENTS = EventBus()
+
+
 # --------------------------------------------------------------------------- #
 class RecController:
     def __init__(self, pt):
         self.pt = pt
         self.snap = None            # última foto de la sesión (tracks + EDL)
         self.lock = threading.RLock()
+        EVENTS.listeners.append(self.on_event)
+
+    def on_event(self, ev):
+        """Sesión abierta/cerrada → la foto vieja no sirve; si se abrió, releer en segundo plano."""
+        if ev["id"] in ("EId_SessionClosed", "EId_SessionOpened", "EId_SessionCreated"):
+            self.snap = None
+            self.follow_item = None
+        if ev["id"] in ("EId_SessionOpened", "EId_SessionCreated"):
+            def later():
+                time.sleep(2)
+                try:
+                    self.refresh()
+                except Exception:                  # noqa: BLE001
+                    pass
+            threading.Thread(target=later, daemon=True).start()
 
     # -- persistencia ---------------------------------------------------------- #
     def store(self):
         return load_json(REC_FILE, {"rec_track": "", "sweep": [], "surface_filter": "", "auto_rename": True,
-                                    "cur": "", "sessions": {}})
+                                    "cur": "", "follow": False, "sessions": {}})
 
     def save(self, st):
         REC_FILE.write_text(json.dumps(st, indent=2, ensure_ascii=False), "utf-8")
@@ -902,7 +1140,7 @@ class RecController:
     def set_state(self, patch):
         with self.lock:
             st = self.store()
-            for k in ("rec_track", "sweep", "surface_filter", "auto_rename", "cur"):
+            for k in ("rec_track", "sweep", "surface_filter", "auto_rename", "cur", "follow"):
                 if k in patch:
                     st[k] = patch[k]
             self.save(st)
@@ -932,6 +1170,10 @@ class RecController:
                                None if sweep is not None else (st.get("surface_filter") or None), snap["tc"])
         if sweep is not None:
             return q
+        cur = st.get("cur", "")
+        fi = self.follow_item
+        if cur and fi and fi["key"] == cur and not any(i["key"] == cur for i in q["items"]):
+            q["items"].append({**fi, "extra": True})      # clic en Pro Tools sobre un track que no se está barriendo
         kinds = {t["name"]: naming.folder_kind(t["folder"], rules) for t in snap["tracks"]}
         sweepable = [{"name": t["name"], "color": t["color"], "folder": t["folder"], "kind": kinds[t["name"]]}
                      for t in snap["tracks"] if kinds[t["name"]]]
@@ -948,7 +1190,7 @@ class RecController:
         surf = [t["name"] for t in snap["tracks"] if kinds[t["name"]] == "surfaces"]
         return {"ok": True, "session": snap["session"], "at": snap["at"], **q, "sweepable": sweepable,
                 "fts": fts_info, "surface_alias": rules.get("surface_alias", {}), "surface_tracks": surf,
-                "cur": st.get("cur", "")}
+                "cur": st.get("cur", ""), "follow": bool(st.get("follow")), "follow_info": self.follow_info}
 
     def _sess(self, st):
         return st.setdefault("sessions", {}).setdefault(self.snap["session"], {})
@@ -1036,6 +1278,76 @@ class RecController:
             self.mark_done(st["cur"], True)
             return self.step(1)
 
+    # -- Seguir Pro Tools: clic en un clip → clip actual (y nombre del track de grabación) -- #
+    _last_sel = None
+    _last_auto_refresh = 0.0
+    _follow_thread = None
+    follow_info = {}
+    follow_item = None
+
+    def follow_tick(self):
+        st = self.store()
+        if not st.get("follow"):
+            self._last_sel = None
+            return None
+        try:
+            sel = self.pt.follow_selection()
+        except SpotError:
+            return None
+        sig = (tuple(sel["tracks"]), sel["in"], sel["out"])
+        if sig == self._last_sel or not sel["tracks"]:
+            return None
+        self._last_sel = sig
+        if not self.snap:
+            return None
+        with self.lock:
+            st = self.store()
+            for tname in sel["tracks"]:
+                q = self.build(st, sweep=[tname])
+                hits = [i for i in q["items"] if naming.overlaps(sel["in"], sel["out"], i["start"], i["end"])]
+                if not hits:
+                    continue
+                it = max(hits, key=lambda i: min(i["end"], max(sel["out"], sel["in"] + 1)) - max(i["start"], sel["in"]))
+                if it["key"] == st.get("cur"):
+                    return None
+                st["cur"] = it["key"]; self.save(st)
+                msg = "Seleccionado"
+                if st.get("auto_rename", True) and st.get("rec_track") and not it["needs"]:
+                    try:
+                        msg = self.pt.rec_go(it["start"], it["end"], st["rec_track"], it["name"], locate=False)["msg"]
+                    except SpotError as e:
+                        msg = str(e)
+                self.follow_info = {"at": time.strftime("%H:%M:%S"), "key": it["key"], "msg": msg}
+                self.follow_item = it
+                log.info("Seguir Pro Tools: %s → %s", it["name"], msg)
+                return it
+        # Selección sobre algo que no está en la foto: puede ser un clip nuevo → releer (como mucho cada 20 s)
+        kinds = {t["name"]: naming.folder_kind(t["folder"], load_rules()) for t in self.snap["tracks"]}
+        if any(kinds.get(t) for t in sel["tracks"]) and time.time() - self._last_auto_refresh > 20:
+            self._last_auto_refresh = time.time()
+            self._last_sel = None
+            log.info("Seguir Pro Tools: clip desconocido, releo la sesión")
+            try:
+                self.refresh()
+            except SpotError:
+                pass
+        return None
+
+    def start_follow(self, every=0.5):
+        """Hilo que revisa la selección de Pro Tools (solo hace algo si «Seguir Pro Tools» está activado)."""
+        if self._follow_thread and self._follow_thread.is_alive():
+            return
+
+        def loop():
+            while True:
+                time.sleep(every)
+                try:
+                    self.follow_tick()
+                except Exception:                  # noqa: BLE001
+                    log.debug("follow", exc_info=True)
+        self._follow_thread = threading.Thread(target=loop, daemon=True, name="follow")
+        self._follow_thread.start()
+
     # -- renombrar desde el clip seleccionado en Pro Tools ---------------------- #
     def from_selection(self):
         """Clic en un clip de spotting en Pro Tools + atajo → el track de grabación toma su nombre."""
@@ -1085,7 +1397,21 @@ def make_app(pt, rec=None):
 
     @routes.get("/api/status")
     async def status(_):
-        return await run(pt.status)
+        loop = asyncio.get_running_loop()
+        try:
+            st = await loop.run_in_executor(None, pt.status)
+        except SpotError as e:
+            st = {"connected": False, "error": str(e)}
+        last = EVENTS.items[-1] if EVENTS.items else None
+        return web.json_response({**st, "ev_seq": EVENTS.seq, "ev_last": last, "ev_status": EVENTS.status})
+
+    @routes.get("/api/events")
+    async def events(req):
+        try:
+            since = int(req.query.get("since", "0"))
+        except ValueError:
+            since = 0
+        return web.json_response({"seq": EVENTS.seq, "status": EVENTS.status, "events": EVENTS.since(since)})
 
     @routes.get("/api/presets")
     async def presets(_):
@@ -1248,6 +1574,10 @@ def make_app(pt, rec=None):
 
     # ---- Modo grabación (la lógica vive en RecController: la usan también los atajos) ---- #
     rec = rec or RecController(pt)
+    rec.start_follow()
+    if not getattr(pt, "_events_started", False):
+        pt._events_started = True
+        pt.start_events(EVENTS)
 
     async def rec_call(fn, *args):
         loop = asyncio.get_running_loop()
@@ -1307,6 +1637,54 @@ def make_app(pt, rec=None):
     @routes.post("/api/rec/from-selection")
     async def rec_from_sel(_):
         return await rec_call(rec.from_selection)
+
+    # ---- Spotting: renombrar clip group, crear track en carpeta, marcador de escena ---- #
+    @routes.post("/api/clip/rename")
+    async def clip_rename(req):
+        b = await req.json()
+        try:
+            track, start, end, name = str(b["track"]), int(b["start"]), int(b["end"]), str(b["name"]).strip()
+        except (KeyError, ValueError, TypeError):
+            return web.json_response({"ok": False, "error": "Faltan datos del clip"}, status=400)
+        if not name:
+            return web.json_response({"ok": False, "error": "Poné un nombre"}, status=400)
+        resp = await run(pt.rename_clip_at, track, start, end, name)
+        if resp.status == 200 and rec.snap:                   # que la foto de la sesión ya tenga el nombre nuevo
+            for ev in rec.snap["edl"].get(track, []):
+                if ev.start == start:
+                    ev.clip = name
+        return resp
+
+    @routes.get("/api/palette")
+    async def palette(_):
+        return await run(pt.color_palette)
+
+    @routes.post("/api/track/create")
+    async def track_create(req):
+        b = await req.json()
+        name, after = str(b.get("name", "")).strip(), str(b.get("after", "")).strip()
+        if not name or not after:
+            return web.json_response({"ok": False, "error": "Faltan el nombre o la carpeta"}, status=400)
+        return await run(pt.create_track, name, after, int(b.get("color_index", -1)))
+
+    @routes.post("/api/marker")
+    async def marker(req):
+        b = await req.json()
+        name = str(b.get("name", "")).strip()
+        if not name:
+            return web.json_response({"ok": False, "error": "Poné un nombre"}, status=400)
+        return await run(pt.add_marker, name, int(b.get("color_index", -1)))
+
+    if isinstance(pt, MockProTools):          # solo en modo prueba: simular avisos y clics en Pro Tools
+        @routes.post("/api/mock/event")
+        async def mock_event(req):
+            b = await req.json(); EVENTS.push(b.get("id", "EId_SessionOpened"), b.get("data", {}))
+            return web.json_response({"ok": True})
+
+        @routes.post("/api/mock/select")
+        async def mock_select(req):
+            pt.mock_sel = await req.json()
+            return web.json_response({"ok": True})
 
     @routes.get("/api/hotkeys")
     async def get_hotkeys(_):

@@ -217,6 +217,14 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
 .rules select,.rules input{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:6px;width:100%;-webkit-user-select:text;user-select:text}
 .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
 
+.clip .ren{grid-row:span 2;border:1px solid var(--line);background:none;color:var(--dim);border-radius:8px;font:inherit;font-size:13px;padding:6px 9px}
+.clip{grid-template-columns:118px 1fr auto auto}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.swatches button{width:34px;height:34px;border-radius:8px;border:2px solid transparent}
+.swatches button.sel{border-color:var(--text);box-shadow:0 0 0 2px var(--bg) inset}
+.swatches button.none{background:var(--panel2);color:var(--dim);font-size:12px;width:auto;padding:0 10px;border-color:var(--line)}
+.card .cren{background:none;border:0;color:var(--dim);font:inherit;font-size:12px;text-decoration:underline;padding:0;justify-self:start}
+.qi.extra .q::before{content:"fuera del barrido · ";color:var(--dim)}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
   background:var(--panel2);border:1px solid var(--line);padding:12px 18px;border-radius:12px;opacity:0;
   transition:.2s;max-width:90vw;font-size:15px;pointer-events:none}
@@ -238,7 +246,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
 
 <main id="viewPads">
   <section>
-    <h2><span>Spotting · marcá la región y tocá</span><span style="display:flex;gap:8px"><button class="hbtn" id="editBtn">✎ Editar</button><button class="hbtn" id="reload">↻ Tracks</button></span></h2>
+    <h2><span>Spotting · marcá la región y tocá</span><span style="display:flex;gap:8px"><button class="hbtn" id="markBtn" title="Marcador en el inicio de la selección">⚑ Escena</button><button class="hbtn" id="editBtn">✎ Editar</button><button class="hbtn" id="reload">↻ Tracks</button></span></h2>
     <div class="cats" id="cats"></div>
     <div class="namebar" id="namebar"><input id="clipName" placeholder="Nombre del clip (vacío = nombre del track)" autocomplete="off" autocapitalize="words"><button class="hbtn" id="clearName">×</button></div>
     <div class="recents" id="recents"></div>
@@ -280,6 +288,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
     <div><div class="lbl2">Solo pasos sobre la superficie</div><select id="recSurf"></select></div>
     <div><div class="lbl2">Track de grabación (se renombra solo)</div><select id="recTrack"></select></div>
     <label class="tog"><input type="checkbox" id="recAuto"> Renombrar el track al ir a cada clip</label>
+    <label class="tog"><input type="checkbox" id="recFollow"> Seguir Pro Tools (clic en un clip de spotting → aparece acá)</label>
     <label class="tog"><input type="checkbox" id="recShowDone"> Mostrar también los ya grabados</label>
     <div style="display:flex;gap:8px"><button class="hbtn" id="recRefresh" style="flex:1">↻ Leer sesión</button><button class="hbtn" id="recRulesBtn">⚙ Reglas de pasos</button></div>
     <div class="hint" id="recAt" style="font-size:12px;color:var(--dim)"></div>
@@ -322,6 +331,16 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
   <div class="ebtns"><button class="hbtn danger" id="ecDelete">Borrar categoría</button><button class="hbtn" id="ecSave">Guardar</button></div>
 </dialog>
 
+<dialog id="ask">
+  <div class="dhead"><b id="askTitle">—</b><button class="hbtn" id="askCancel">Cancelar</button></div>
+  <div class="ef">
+    <label id="askLabel">Nombre<input id="askInput" autocomplete="off" autocapitalize="words"></label>
+    <div id="askColors" style="display:none"><div style="font-size:13px;color:var(--dim);margin-bottom:6px">Color</div><div class="swatches" id="askSw"></div></div>
+    <div id="askHint" style="font-size:12px;color:var(--dim)"></div>
+  </div>
+  <div class="ebtns"><button class="hbtn" id="askOk">Aceptar</button></div>
+</dialog>
+
 <dialog id="stat">
   <div class="dhead"><b>Estado</b><button class="hbtn" id="statClose">Cerrar</button></div>
   <div class="st" id="stBody"></div>
@@ -362,7 +381,70 @@ async function poll() {
     wasConnected = !!s.connected;
     $('#session').textContent = s.connected ? s.session + (s.mock ? '  ·  MOCK' : '') : s.error;
     if (s.connected && s.session !== sessionName) { const first = !sessionName; sessionName = s.session; seen = null; if (!first) loadLayout(true); }
+    // Avisos de Pro Tools (sesión abierta/cerrada, track renombrado)
+    if (evSeq === null) evSeq = s.ev_seq || 0;
+    else if (s.ev_seq > evSeq && s.ev_last) {
+      evSeq = s.ev_seq; const ev = s.ev_last;
+      toast('Pro Tools: ' + ev.label + (ev.data && (ev.data.session_name || ev.data.new_name) ? ' · ' + (ev.data.session_name || ev.data.new_name) : ''));
+      loadLayout(true);
+      if (document.body.classList.contains('rec')) setTimeout(recEnter, 3000);
+    }
+    evStatus = s.ev_status || '';
   } catch { $('#dot').className = 'dot off'; $('#session').textContent = 'sin conexión con la computadora'; document.body.classList.remove('offline'); }
+}
+
+/* ---------- diálogo genérico (nombre + color) ---------- */
+let palette = null;
+async function getPalette() {
+  if (palette) return palette;
+  try { palette = (await api('/api/palette')).colors || []; } catch { palette = []; }
+  return palette;
+}
+function ask({title, label = 'Nombre', value = '', hint = '', colors = null}) {
+  return new Promise(resolve => {
+    $('#askTitle').textContent = title; $('#askLabel').firstChild.textContent = label;
+    $('#askInput').value = value; $('#askHint').textContent = hint;
+    let color = -1;
+    const sw = $('#askSw'); sw.innerHTML = '';
+    $('#askColors').style.display = colors && colors.length ? '' : 'none';
+    if (colors && colors.length) {
+      const none = document.createElement('button'); none.className = 'none sel'; none.textContent = 'Sin color';
+      none.onclick = () => { color = -1; sw.querySelectorAll('button').forEach(b => b.classList.remove('sel')); none.classList.add('sel'); };
+      sw.append(none);
+      colors.forEach((c, i) => {
+        const b = document.createElement('button'); b.style.background = tcolor(c) || c;
+        b.onclick = () => { color = i; sw.querySelectorAll('button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); };
+        sw.append(b);
+      });
+    }
+    const done = v => { $('#ask').close(); resolve(v); };
+    $('#askOk').onclick = () => { const v = $('#askInput').value.trim(); if (!v) return toast('Poné un nombre', true); done({name: v, color}); };
+    $('#askCancel').onclick = () => done(null);
+    $('#askInput').onkeydown = e => { if (e.key === 'Enter') $('#askOk').click(); };
+    $('#ask').showModal(); setTimeout(() => { $('#askInput').focus(); $('#askInput').select(); }, 50);
+  });
+}
+async function renameClip(c, after) {
+  const r = await ask({title: 'Renombrar clip de spotting', value: c.clip || '', hint: `${c.track} · ${c.tc_in || ''}`});
+  if (!r) return;
+  try { const x = await api('/api/clip/rename', {method: 'POST', body: JSON.stringify({track: c.track, start: c.start, end: c.end, name: r.name})});
+        toast(x.msg); buzz(true); if (after) after(r.name); }
+  catch (e) { toast(e.message, true); }
+}
+$('#markBtn').onclick = async () => {
+  const r = await ask({title: 'Marcador de escena', label: 'Nombre', value: 'Esc ', hint: 'Se crea en el inicio de la selección de Pro Tools.', colors: await getPalette()});
+  if (!r) return;
+  try { const x = await api('/api/marker', {method: 'POST', body: JSON.stringify({name: r.name, color_index: r.color})}); toast(x.msg); buzz(true); }
+  catch (e) { toast(e.message, true); }
+};
+async function createTrackIn(tab) {
+  const last = tab.groups.flatMap(g => g.tracks).slice(-1)[0];
+  if (!last) return toast('La carpeta no tiene tracks para ubicar el nuevo', true);
+  const r = await ask({title: `Nuevo track en ${tab.name}`, label: 'Nombre del track', hint: `Se crea mono, después de «${last.name}».`, colors: await getPalette()});
+  if (!r) return;
+  try { const x = await api('/api/track/create', {method: 'POST', body: JSON.stringify({name: r.name, after: last.name, color_index: r.color})});
+        toast(x.msg); buzz(true); setTimeout(() => loadLayout(true), 600); }
+  catch (e) { toast(e.message, true); }
 }
 
 /* ---------- estado, reconexión e informe ---------- */
@@ -386,6 +468,7 @@ async function renderStat() {
   html += row('Última respuesta OK', h.last_ok || '—');
   if (h.last_error) html += row('Último error', `${esc(h.last_error.msg)} (${h.last_error.at})`, 'bad');
   html += row('Conexiones', h.connections);
+  html += row('Avisos de Pro Tools', esc(evStatus || '—'));
   html += '<div class="hist">' + (h.history || []).map(x =>
     `<div><span>${x.at}</span><span class="c">${esc(x.command)}</span><span>${x.ms} ms</span>${x.result === 'ok' ? '' : `<span class="e">${esc(x.result)}</span>`}</div>`
   ).join('') + '</div>';
@@ -482,8 +565,9 @@ function renderGrid() {
   if (t.hiddenTab) {
     bar.innerHTML = '<span>Tocá un track (o «Mostrar carpeta») para que vuelva a su pestaña.</span>';
   } else {
-    bar.innerHTML = '<span>Tocá un track para ocultarlo, o ocultá toda la carpeta.</span><button class="hbtn">Ocultar carpeta</button>';
-    bar.querySelector('button').onclick = () => { toggleIn(hidden.folders, t.tab.name); tabKey = null; saveHidden(`Carpeta «${t.tab.name}» oculta`); };
+    bar.innerHTML = '<span>Tocá un track para ocultarlo, o ocultá toda la carpeta.</span><button class="hbtn" data-a="new">+ Track</button><button class="hbtn" data-a="hide">Ocultar carpeta</button>';
+    bar.querySelector('[data-a=hide]').onclick = () => { toggleIn(hidden.folders, t.tab.name); tabKey = null; saveHidden(`Carpeta «${t.tab.name}» oculta`); };
+    bar.querySelector('[data-a=new]').onclick = () => createTrackIn(layout.tabs.find(x => x.name === t.tab.name) || t.tab);
   }
   w.append(bar);
   let n = 0;
@@ -748,6 +832,7 @@ $('#undo').onclick = async () => {
 };
 
 /* ---------- lista de spotting en vivo ---------- */
+let evSeq = null, evStatus = '';
 let sessionName = '', clips = [], seen = null, spotTracks = [], listT, lastOk = null;
 const key = c => c.track + '|' + c.clip + '|' + c.start;
 const store = {
@@ -802,7 +887,8 @@ function renderList() {
   clips.forEach(c => {
     const d = document.createElement('div');
     d.className = 'clip' + (s.has(key(c)) ? '' : ' new');
-    d.innerHTML = '<span class="tin"></span><span class="cn"></span><span class="du"></span><span class="tout"></span><span class="tr"></span>';
+    d.innerHTML = '<span class="tin"></span><span class="cn"></span><span class="du"></span><button class="ren" title="Renombrar el clip en Pro Tools">✎</button><span class="tout"></span><span class="tr"></span>';
+    d.querySelector('.ren').onclick = ev => { ev.stopPropagation(); renameClip(c, n => { c.clip = n; renderList(); }); };
     d.querySelector('.tin').textContent = c.tc_in;
     d.querySelector('.tout').textContent = '→ ' + c.tc_out;
     d.querySelector('.cn').textContent = c.clip || '(sin nombre)';
@@ -853,6 +939,7 @@ async function recEnter() {
   }).catch(() => {});
   recSt = await api('/api/rec/state').catch(() => ({}));
   $('#recAuto').checked = recSt.auto_rename !== false;
+  $('#recFollow').checked = !!recSt.follow;
   recTracks = await api('/api/tracks').catch(() => []);
   const r = await api('/api/rec/queue').catch(() => null);
   if (r && !r.need_refresh) recApply(r); else await recRefresh();
@@ -915,6 +1002,8 @@ $('#recSurf').onchange = e => { recSt.surface_filter = e.target.value; recPutSta
 $('#recTrack').onchange = e => { recSt.rec_track = e.target.value; recPutState({rec_track: recSt.rec_track}); };
 $('#recAuto').onchange = e => { recSt.auto_rename = e.target.checked; recPutState({auto_rename: recSt.auto_rename}); };
 $('#recShowDone').onchange = () => recRender();
+$('#recFollow').onchange = e => { recSt.follow = e.target.checked; recPutState({follow: recSt.follow});
+  toast(recSt.follow ? 'Siguiendo Pro Tools: hacé clic en un clip de spotting' : 'Ya no sigo a Pro Tools'); };
 $('#recRefresh').onclick = recRefresh;
 
 function recItem() { return rec.items.find(i => i.key === recCur); }
@@ -930,10 +1019,13 @@ function recRender() {
     card.innerHTML = `<div class="card">
       <div class="tcs">${esc2(it.tc_in || it.start)}<small>→ ${esc2(it.tc_out || it.end)}</small></div>
       <div class="src">${esc2(it.track)} · clip «${esc2(it.clip)}»${it.muted ? ' · muteado' : ''}${it.done ? ' · grabado' : ''}</div>
+      <button class="cren" id="recRenClip">✎ renombrar el clip de spotting</button>
       <div class="nm ${it.name_src}" id="recName" title="Tocá para editar">${esc2(it.name)}</div>
       <div class="hint">${src ? esc2(src) + ' · ' : ''}tocá el nombre para editarlo</div>
       <div id="recNeeds"></div></div>`;
     $('#recName').onclick = () => recEditName(it);
+    $('#recRenClip').onclick = () => renameClip({track: it.track, clip: it.clip, start: it.start, end: it.end, tc_in: it.tc_in},
+                                                () => setTimeout(async () => recApply(await api('/api/rec/queue')), 300));
     const needs = $('#recNeeds');
     if (it.needs.includes('surface')) needs.append(recNeed('Choque de superficies: ¿sobre cuál camina?', it.surfaces, v => recChoose({key: it.key, surface: v})));
     if (it.needs.includes('shoe')) {
@@ -950,7 +1042,7 @@ function recRender() {
   const q = $('#recQueue'); q.innerHTML = '';
   recVisible().forEach(x => {
     const d = document.createElement('div');
-    d.className = 'qi' + (x.key === recCur ? ' cur' : '') + (pending(x) ? '' : ' gone');
+    d.className = 'qi' + (x.key === recCur ? ' cur' : '') + (pending(x) ? '' : ' gone') + (x.extra ? ' extra' : '');
     d.innerHTML = `<span class="t">${esc2(x.tc_in || x.start)}</span><span class="q">${esc2(x.name)}</span><span class="w">${x.needs.length ? '⚠ elegir' : ''}</span>`;
     d.onclick = () => recSelect(x.key, true);
     q.append(d);
