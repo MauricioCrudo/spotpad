@@ -80,9 +80,10 @@ body.editing .tpad .hide{display:block}
 body.editing .tpad{outline:1.5px dashed var(--line);outline-offset:-4px}
 .tpad.hidden-t{opacity:.45}
 .fbar{display:none;gap:8px;margin-bottom:10px;align-items:center;color:var(--dim);font-size:13px}
-body.editing .fbar{display:flex}
+body.editing .fbar,.fbar.always{display:flex}
 .fbar span{flex:1}
 .cat.hiddentab{border-style:dotted}
+.tpad.offpad{opacity:.55;filter:grayscale(.7)}
 .pad .dest{font:500 11px ui-monospace,Menlo,monospace;color:var(--dim);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pad .dest.miss{color:#ffb4ac}
 body.editing .pad{outline:1.5px dashed var(--accent);outline-offset:-4px}
@@ -517,10 +518,12 @@ const ls = {
 function allTabs() {
   const vis = layout.tabs.filter(t => !isHidF(t.name)).map(t => ({...t,
     groups: t.groups.map(g => ({...g, tracks: g.tracks.filter(x => !isHidT(x.name))})).filter(g => g.tracks.length)}));
-  const h = hiddenTab();
+  const h = hiddenTab(), off = layout.inactive || [];
   return [...vis.map(t => ({key: 'f:' + t.name, label: t.name, kind: 'folder', tab: t})),
           ...presets.map(p => ({key: 'p:' + p.id, label: p.label, kind: 'preset', cat: p})),
-          ...(h ? [{key: 'h:ocultos', label: `Ocultos (${h.groups.reduce((n, g) => n + g.tracks.length, 0)})`, kind: 'folder', tab: h, hiddenTab: true}] : [])];
+          ...(h ? [{key: 'h:ocultos', label: `Ocultos (${h.groups.reduce((n, g) => n + g.tracks.length, 0)})`, kind: 'folder', tab: h, hiddenTab: true}] : []),
+          ...(off.length ? [{key: 'i:inactivos', label: `Inactivos (${off.reduce((n, g) => n + g.tracks.length, 0)})`, kind: 'folder',
+                            tab: {name: 'Inactivos', groups: off}, hiddenTab: true, inactiveTab: true}] : [])];
 }
 function tcolor(c) {
   if (!c) return '';
@@ -557,12 +560,15 @@ function renderCats() {
 }
 function renderGrid() {
   const w = $('#gwrap'), t = allTabs().find(t => t.key === tabKey); w.innerHTML = '';
-  $('#namebar').style.display = $('#recents').style.display = (t && t.kind === 'folder') ? '' : 'none';
+  $('#namebar').style.display = $('#recents').style.display = (t && t.kind === 'folder' && !t.inactiveTab) ? '' : 'none';
   if (!t) { w.innerHTML = '<div class="empty">No encontré carpetas con tracks en la sesión.</div>'; return; }
   if (t.kind === 'preset') return renderPresetGrid(w, t.cat);
   // Barra de edición: ocultar la carpeta entera (o, en Ocultos, explicar cómo volver)
   const bar = document.createElement('div'); bar.className = 'fbar';
-  if (t.hiddenTab) {
+  if (t.inactiveTab) {
+    bar.classList.add('always');
+    bar.innerHTML = '<span>Tracks inactivos en Pro Tools: SpotPad no los usa (botonera, lista ni grabación). Tocá uno dos veces para reactivarlo.</span>';
+  } else if (t.hiddenTab) {
     bar.innerHTML = '<span>Tocá un track (o «Mostrar carpeta») para que vuelva a su pestaña.</span>';
   } else {
     bar.innerHTML = '<span>Tocá un track para ocultarlo, o ocultá toda la carpeta.</span><button class="hbtn" data-a="new">+ Track</button><button class="hbtn" data-a="hide">Ocultar carpeta</button>';
@@ -587,6 +593,24 @@ function renderGrid() {
       b.innerHTML = '<span class="k"></span><span class="lab"></span><span class="hide"></span>';
       b.querySelector('.k').textContent = ++n; b.querySelector('.lab').textContent = tr.name;
       b.querySelector('.hide').textContent = t.hiddenTab ? 'mostrar' : 'ocultar';
+      if (t.inactiveTab) {
+        b.classList.add('offpad');
+        b.querySelector('.hide').textContent = tr.folder ? 'carpeta' : '';
+        b.onclick = async () => {        // dos toques: el primero arma, el segundo reactiva
+          if (b.classList.contains('busy')) return;
+          if (!b.dataset.arm) {
+            b.dataset.arm = '1'; b.querySelector('.lab').textContent = '¿Reactivar ' + tr.name + '?';
+            setTimeout(() => { delete b.dataset.arm; b.querySelector('.lab').textContent = tr.name; }, 3000);
+            return;
+          }
+          b.classList.add('busy');
+          try { const r = await api('/api/track/active', {method: 'POST', body: JSON.stringify({id: tr.id, active: true})});
+                flash(b, true); toast(r.msg); await loadLayout(true); }
+          catch (e) { flash(b, false); toast(e.message, true); }
+          b.classList.remove('busy');
+        };
+        grid.append(b); return;
+      }
       b.onclick = async () => {
         if (editing) {
           if (t.hiddenTab && g.folder && !isHidT(tr.name)) {   // track de carpeta oculta → mostrar la carpeta

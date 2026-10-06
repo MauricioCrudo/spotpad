@@ -28,7 +28,7 @@ from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 import naming
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -243,9 +243,19 @@ def build_layout(tracks, exclude=()):
             out = [{"id": "name:" + t["parent_name"], "name": t["parent_name"], "index": t["index"]}]
         return out
 
-    tabs = {}
+    tabs, off = {}, {}
     for t in sorted(tracks, key=lambda t: t["index"]):
-        if is_folder(t) or t.get("inactive"):
+        if t.get("inactive"):
+            # Para la pestaña «Inactivos»: solo el de más arriba (si la carpeta está inactiva,
+            # se lista la carpeta y no cada track de adentro).
+            folders = chain(t)
+            top = folders[0]["name"] if folders else (t["name"] if is_folder(t) else "")
+            if top and top.lower() not in excl and not any(f.get("inactive") for f in folders):
+                gname = " › ".join(f["name"] for f in folders) or "Carpetas"
+                off.setdefault(gname, []).append({"id": t["id"], "name": t["name"], "color": t["color"],
+                                                  "folder": is_folder(t)})
+            continue
+        if is_folder(t):
             continue
         folders = chain(t)
         if not folders or folders[0]["name"].lower() in excl:
@@ -256,7 +266,8 @@ def build_layout(tracks, exclude=()):
         if not tab["groups"] or tab["groups"][-1]["name"] != gname:
             tab["groups"].append({"name": gname, "tracks": []})
         tab["groups"][-1]["tracks"].append({"id": t["id"], "name": t["name"], "color": t["color"]})
-    return {"tabs": sorted(tabs.values(), key=lambda x: x["index"])}
+    return {"tabs": sorted(tabs.values(), key=lambda x: x["index"]),
+            "inactive": [{"name": k, "tracks": v} for k, v in off.items()]}
 
 
 class SpotError(Exception):
@@ -470,6 +481,26 @@ class ProTools:
             from ptsl import PTSL_pb2 as pt
             return build_layout([track_info(t, pt) for t in e.track_list()], exclude)
         return self._call(f)
+
+    def set_active(self, track_id: str, active: bool = True):
+        """Activa/desactiva un track (o carpeta). No se sabe con certeza si `enabled` del SDK
+        significa «inactivo»: se verifica leyendo el estado y, si quedó al revés, se corrige."""
+        def f(e):
+            from ptsl import PTSL_pb2 as pt
+            find = lambda: next((t for t in e.track_list() if t.id == track_id), None)
+            t = find()
+            if t is None:
+                raise SpotError("Ese track ya no existe en la sesión")
+            if is_inactive(t) != active:
+                return {"ok": True, "msg": f"«{t.name}» ya estaba {'activo' if active else 'inactivo'}"}
+            op = _op("CId_SetTrackInactiveState")
+            for enabled in (not active, active):
+                e.client.run(op(track_names=[t.name], enabled=enabled))
+                t = find()
+                if t is not None and is_inactive(t) != active:
+                    return {"ok": True, "msg": f"«{t.name}» {'activado' if active else 'desactivado'}"}
+            raise SpotError("Pro Tools no cambió el estado del track")
+        return self._call(f, timeout=20)
 
     def group_on_track(self, track_id: str, name: str = ""):
         """Crea el clip group en el track del botón, con el rango marcado en cualquier track."""
@@ -923,6 +954,7 @@ class MockProTools:
         self._tracks = [{"id": f"t{i}", "name": n, "index": i} for i, n in enumerate(
             ["DIAL GUIDE", "HANDS SPOT", "HANDS 1", "HANDS 2", "HANDS 3", "PROPS PAPEL"], 1)]
         self._last = "Hands grab body"
+        self._off = {"t20", "t38"}      # inactivos: IA Dudas y Group (grabado completo)
 
     def status(self):
         return {"connected": True, "session": "MOCK_R1_Foley", "ptsl": 0, "mock": True}
@@ -950,11 +982,11 @@ class MockProTools:
 
     def layout(self, exclude=()):
         F = lambda i, n: {"id": f"f{i}", "name": n, "index": i, "type": "TT_BasicFolder", "color": "", "parent_id": "", "parent_name": ""}
-        T = lambda i, n, p, c="", off=False: {"id": f"t{i}", "name": n, "index": i, "type": "TT_Audio", "color": c,
-                                              "parent_id": f"f{p}", "parent_name": "", "inactive": off}
+        T = lambda i, n, p, c="": {"id": f"t{i}", "name": n, "index": i, "type": "TT_Audio", "color": c,
+                                   "parent_id": f"f{p}", "parent_name": "", "inactive": f"t{i}" in self._off}
         tr = [F(10, "Surfaces")] + [T(11 + k, n, 10) for k, n in enumerate(
                   ["Gritty", "Concrete Clean", "Wood", "Loose Wood", "Grass", "Gravel", "Carpet", "Water", "Special"])] + \
-             [T(20, "IA Dudas", 10, off=True)] + \
+             [T(20, "IA Dudas", 10)] + \
              [F(30, "Footsteps"), T(31, "Henry", 30, "#3E9B4F"), T(32, "Sonia", 30, "#C9567A"),
               T(33, "Male Shoes", 30, "#3E9B4F"), T(34, "Femme Shoes", 30, "#C9567A"), T(35, "Sneakers", 30, "#3B7DD8"),
               T(36, "Boots", 30, "#8A5A2B"), T(37, "Barefoot", 30), T(38, "Group", 30)] + \
@@ -964,6 +996,13 @@ class MockProTools:
                    "Papers", "Tableware", "Props 1", "Props 2"])]
         tr[[t["id"] for t in tr].index("f51")]["parent_id"] = "f50"
         return build_layout(tr, exclude)
+
+    def set_active(self, track_id, active=True):
+        if active:
+            self._off.discard(track_id)
+        else:
+            self._off.add(track_id)
+        return {"ok": True, "msg": f"Track {'activado' if active else 'desactivado'} (mock)"}
 
     def group_on_named(self, track_name, name=""):
         t = next((t for g in self.layout()["tabs"] for gr in g["groups"] for t in gr["tracks"]
@@ -1670,6 +1709,13 @@ def make_app(pt, rec=None):
     @routes.get("/api/palette")
     async def palette(_):
         return await run(pt.color_palette)
+
+    @routes.post("/api/track/active")
+    async def track_active(req):
+        body = await req.json()
+        if not body.get("id"):
+            return web.json_response({"ok": False, "error": "Falta el track"}, status=400)
+        return await run(pt.set_active, str(body["id"]), bool(body.get("active", True)))
 
     @routes.post("/api/track/create")
     async def track_create(req):
