@@ -28,7 +28,7 @@ from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 import naming
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -207,6 +207,15 @@ def _op(name):
     return cls
 
 
+def is_inactive(t) -> bool:
+    """Track inactivo en Pro Tools (explícito o porque su carpeta lo está). SpotPad los ignora:
+    sirve para las dudas de la IA y para los tracks ya grabados completos."""
+    try:
+        return int(t.track_attributes.is_inactive) >= 2   # SetExplicitly / SetImplicitly
+    except Exception:
+        return False
+
+
 def track_info(t, pt=None) -> dict:
     """Track del SDK → dict simple (lo que usa la botonera)."""
     try:
@@ -215,13 +224,13 @@ def track_info(t, pt=None) -> dict:
         ttype = str(t.type)
     return {"id": t.id, "name": t.name, "index": t.index, "type": ttype,
             "color": getattr(t, "color", ""), "parent_id": getattr(t, "parent_folder_id", ""),
-            "parent_name": getattr(t, "parent_folder_name", "")}
+            "parent_name": getattr(t, "parent_folder_name", ""), "inactive": is_inactive(t)}
 
 
 def build_layout(tracks, exclude=()):
     """Una pestaña por carpeta de primer nivel; adentro, un botón por track.
     Subcarpetas → grupos dentro de la pestaña. Tracks fuera de carpetas no aparecen
-    (video, diálogos, pre, grabación)."""
+    (video, diálogos, pre, grabación), ni los inactivos."""
     by_id = {t["id"]: t for t in tracks}
     is_folder = lambda t: "Folder" in t["type"]
     excl = {x.lower() for x in exclude}
@@ -236,7 +245,7 @@ def build_layout(tracks, exclude=()):
 
     tabs = {}
     for t in sorted(tracks, key=lambda t: t["index"]):
-        if is_folder(t):
+        if is_folder(t) or t.get("inactive"):
             continue
         folders = chain(t)
         if not folders or folders[0]["name"].lower() in excl:
@@ -607,7 +616,8 @@ class ProTools:
 
     def tracks(self):
         def f(e):
-            return [{"id": t.id, "name": t.name, "index": t.index} for t in e.track_list()]
+            return [{"id": t.id, "name": t.name, "index": t.index} for t in e.track_list()
+                    if not is_inactive(t)]
         return self._call(f)
 
     def rename_track_to_selection(self, track_id: str, prefix: str = ""):
@@ -656,7 +666,7 @@ class ProTools:
                 return {"ok": True, "paused": True, "state": state}
             tracks = e.track_list()
             order = {t.name: t.index for t in tracks}
-            wanted = {t.name for t in tracks if t.id in track_ids}
+            wanted = {t.name for t in tracks if t.id in track_ids and not is_inactive(t)}
             if not wanted:
                 return {"ok": True, "paused": False, "need_tracks": True, "clips": []}
             b = e.export_session_as_text()
@@ -692,7 +702,7 @@ class ProTools:
             infos = [track_info(t, pt) for t in e.track_list()]
             tops = top_folders(infos)
             tracks = [{"id": t["id"], "name": t["name"], "color": t["color"], "folder": tops.get(t["name"], "")}
-                      for t in infos if "Folder" not in t["type"]]
+                      for t in infos if "Folder" not in t["type"] and not t["inactive"]]
             b = e.export_session_as_text()
             b.include_track_edls(); b.time_type("samples"); b.dont_show_crossfades()
             edl = parse_session_text(b.export_string())
@@ -940,10 +950,11 @@ class MockProTools:
 
     def layout(self, exclude=()):
         F = lambda i, n: {"id": f"f{i}", "name": n, "index": i, "type": "TT_BasicFolder", "color": "", "parent_id": "", "parent_name": ""}
-        T = lambda i, n, p, c="": {"id": f"t{i}", "name": n, "index": i, "type": "TT_Audio", "color": c,
-                                   "parent_id": f"f{p}", "parent_name": ""}
+        T = lambda i, n, p, c="", off=False: {"id": f"t{i}", "name": n, "index": i, "type": "TT_Audio", "color": c,
+                                              "parent_id": f"f{p}", "parent_name": "", "inactive": off}
         tr = [F(10, "Surfaces")] + [T(11 + k, n, 10) for k, n in enumerate(
                   ["Gritty", "Concrete Clean", "Wood", "Loose Wood", "Grass", "Gravel", "Carpet", "Water", "Special"])] + \
+             [T(20, "IA Dudas", 10, off=True)] + \
              [F(30, "Footsteps"), T(31, "Henry", 30, "#3E9B4F"), T(32, "Sonia", 30, "#C9567A"),
               T(33, "Male Shoes", 30, "#3E9B4F"), T(34, "Femme Shoes", 30, "#C9567A"), T(35, "Sneakers", 30, "#3B7DD8"),
               T(36, "Boots", 30, "#8A5A2B"), T(37, "Barefoot", 30), T(38, "Group", 30)] + \
@@ -1008,6 +1019,7 @@ class MockProTools:
         E = lambda tr, clip, a, b, m=False: EdlEvent(tr, clip, int(a * S), int(b * S), m)
         edl = {
             "Wood": [E("Wood", "Wood", 0, 40)],
+            "IA Dudas": [E("IA Dudas", "Hardwood / Loose Wood?", 0, 140)],   # inactivo: no entra
             "Concrete Clean": [E("Concrete Clean", "Concrete Clean", 35, 90)],
             "Grass": [E("Grass", "Grass", 90, 140)],
             "Henry": [E("Henry", "Henry", 2, 6), E("Henry", "Henry", 12, 15), E("Henry", "Henry Sneakers", 50, 55),

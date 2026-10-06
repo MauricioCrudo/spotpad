@@ -9,4 +9,14 @@ assert [t["name"] for t in L["tabs"]] == ["Surfaces", "Props", "Footsteps"], L
 props = L["tabs"][1]["groups"]
 assert [(g["name"], [t["name"] for t in g["tracks"]]) for g in props] == [("Hands", ["Hands Body"]), ("", ["Chairs"])]
 assert [t["name"] for t in build_layout(tracks, ["props"])["tabs"]] == ["Surfaces", "Footsteps"]
+# Tracks inactivos (dudas de la IA, tracks ya grabados): no aparecen
+off = tracks + [dict(T(12, "IA Dudas", "f3"), inactive=True)]
+assert [t["name"] for t in build_layout(off)["tabs"][0]["groups"][0]["tracks"]] == ["Gritty", "Wood"]
+
+# is_inactive lee el atributo del SDK (explícito=2, implícito por carpeta=3)
+from types import SimpleNamespace as N
+from bridge import is_inactive
+mk = lambda v: N(track_attributes=N(is_inactive=v))
+assert [is_inactive(mk(v)) for v in (0, 1, 2, 3)] == [False, False, True, True]
+assert is_inactive(N()) is False
 print("layout OK")
