@@ -34,13 +34,23 @@ def main():
     model = SiglipModel.from_pretrained(a.model).eval()
     tok = AutoTokenizer.from_pretrained(a.model)
 
+    def as_tensor(out):
+        """transformers 5 devuelve un objeto en vez del tensor: sacar el embedding."""
+        if isinstance(out, torch.Tensor):
+            return out
+        for k in ("image_embeds", "text_embeds", "pooler_output"):
+            v = getattr(out, k, None)
+            if isinstance(v, torch.Tensor):
+                return v
+        return out[0]
+
     class VisionOnly(torch.nn.Module):
         def __init__(self, m):
             super().__init__()
             self.m = m
 
         def forward(self, pixel_values):
-            return F.normalize(self.m.get_image_features(pixel_values=pixel_values), dim=-1)
+            return F.normalize(as_tensor(self.m.get_image_features(pixel_values=pixel_values)), dim=-1)
 
     vis = VisionOnly(model).eval()
     x = torch.randn(2, 3, 224, 224)
@@ -87,7 +97,7 @@ def main():
     with torch.no_grad():
         for name, prompts in prompt_groups(cfg).items():
             t = tok(prompts, padding="max_length", max_length=64, truncation=True, return_tensors="pt")
-            out[name] = F.normalize(model.get_text_features(input_ids=t["input_ids"]), dim=-1).numpy().astype(np.float32)
+            out[name] = F.normalize(as_tensor(model.get_text_features(input_ids=t["input_ids"])), dim=-1).numpy().astype(np.float32)
         out["logit_scale"] = np.array(float(model.logit_scale.exp()), np.float32)
         out["logit_bias"] = np.array(float(model.logit_bias), np.float32)
     out["hash"] = np.array(prompts_hash(cfg))

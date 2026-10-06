@@ -85,9 +85,11 @@ jobs:
       - name: Exportar SigLIP a ONNX
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
+          set -o pipefail
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-modelo.txt
-          python export_model.py
+          python export_model.py 2>&1 | tee export.log || {
+            tail -n 25 export.log | sed 's/^/::error::/'; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: modelo
