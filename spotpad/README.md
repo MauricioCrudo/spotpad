@@ -138,9 +138,9 @@ Funcionan con Pro Tools en primer plano:
 | **⌃⌥⌘G** | Ctrl+Alt+Shift+G | Marcar grabado y pasar al siguiente |
 
 - Usan la misma configuración que la pestaña Grabar (track de grabación, qué barrer, reglas). El iPad sigue solo lo que hacés con las teclas.
-- Si falta elegir superficie o calzado, en Mac aparece una lista encima de Pro Tools para elegirlo ahí mismo (la primera vez macOS pide permiso para que SpotPad use «System Events»); después renombra y vuelve a Pro Tools. En Windows se resuelve en el iPad.
+- Si falta elegir superficie o calzado, en Mac aparece una lista encima de Pro Tools para elegirlo ahí mismo (sin pedir permisos); después renombra y vuelve a Pro Tools. En Windows se resuelve en el iPad.
 - **Siguiente / Anterior** eran ⌃⌥⌘ + flechas, que chocan con otras funciones: ahora son **N / B**. Otras opciones en el ícono → *Atajos de teclado → Teclas de Siguiente / Anterior* (. y , · F14 y F13 · flechas).
-- **Mac:** la primera vez macOS pide permiso de **Accesibilidad** para SpotPad (Ajustes del Sistema → Privacidad y seguridad → Accesibilidad). Como la app no está firmada, después de actualizarla puede pedirlo de nuevo: sacá SpotPad de la lista y volvé a agregarlo.
+- **Mac: no piden ningún permiso** (desde 0.9.2 usan los atajos propios de macOS, no Accesibilidad), así que actualizar la app no obliga a volver a darlos. Además Pro Tools no recibe esas teclas. Si una combinación ya la usa otra app, el menú del ícono lo avisa: elegí otras teclas.
 - Para cambiar las teclas: ícono → *Atajos de teclado → Cambiar teclas (hotkeys.json)*, y después *Reactivar atajos*.
 - Las mismas acciones para Stream Deck / Keyboard Maestro: `POST /api/rec/from-selection`, `/api/rec/next`, `/api/rec/prev`, `/api/rec/done-next`.
 

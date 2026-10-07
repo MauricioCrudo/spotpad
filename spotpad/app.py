@@ -74,6 +74,12 @@ def selftest(port):
         for b in list(hk.DEFAULTS["bindings"].values()) + [f"{hk.MOD}+{n}" for n, p, _l in hk.SCHEMES.values()] \
                 + [f"{hk.MOD}+{p}" for n, p, _l in hk.SCHEMES.values()]:
             keyboard.HotKey.parse(b)
+    if sys.platform == "darwin":                 # atajos sin permisos (Carbon): que carguen y registren
+        from PyObjCTools import AppHelper        # noqa: F401
+        ck = hk.CarbonKeys()
+        bad = ck.register({b: (lambda: None) for b in hk.DEFAULTS["bindings"].values()})
+        print(f"atajos macOS: {len(ck.refs)} registrados, fallaron: {bad}")
+        ck.stop()
     pt = MockProTools()
     stop = start_server(pt, port, RecController(pt))
     try:
@@ -168,7 +174,7 @@ def main():
             Item("Reactivar atajos", keys_restart),
             Item("Cambiar teclas (hotkeys.json)", lambda *_: open_path(HOTKEYS_FILE)),
             *([Item("Permiso de Accesibilidad…", lambda *_: hk.open_accessibility_settings())]
-              if sys.platform == "darwin" else []),
+              if sys.platform == "darwin" and not isinstance(keys.listener, hk.CarbonKeys) else []),
         )
 
     def quit_app(icon, _):

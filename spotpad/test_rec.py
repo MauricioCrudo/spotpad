@@ -57,27 +57,12 @@ print("follow/eventos OK")
 
 # --- Color de track: si Pro Tools cuenta desde 1, se detecta y se corrige ---
 from bridge import ProTools
-class CT:
-    def __init__(s, n, c): s.name, s.color = n, c
-class PEng:
-    def __init__(self, base):
-        self.base, self.tcolor = base, ""; eng = self
-        self.pal = ["#ff000001", "#ff000002", "#ff000003", "#ff000004"]
-        class C:
-            def run(_, op):
-                n = type(op).__name__
-                if n == "CId_GetColorPalette":
-                    op.response = type("R", (), {"color_list": eng.pal})()
-                elif n == "CId_SetTrackColor":
-                    eng.tcolor = eng.pal[op.request.color_index - eng.base]
-        self.client = C()
-    def track_list(self): return [CT("SNEAKERS 04", self.tcolor)]
-for base in (0, 1):
-    p2 = ProTools(); e2 = PEng(base)
-    p2._paint(e2, ["SNEAKERS 04"], 2)
-    assert e2.tcolor == "#ff000003", (base, e2.tcolor)
-    assert p2._color_offset == base
-print("color OK")
+# --- Nunca usar GetColorPalette (cuelga el SDK de Pro Tools 2025.12) ---
+import re, pathlib
+src = pathlib.Path(__file__).with_name("bridge.py").read_text("utf-8")
+code = "\n".join(l for l in src.splitlines() if not l.strip().startswith("#"))
+assert "GetColorPalette" not in code and "SetTrackColor" not in code
+print("sin paleta OK")
 
 # --- Filtro por palabra: primero una parte de la categoría (p. ej. «metal»), después el resto ---
 rec = RecController(MockProTools()); rec.refresh()

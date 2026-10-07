@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -997,19 +997,15 @@ class ProTools:
             return {"ok": True, "msg": f"Clip renombrado: «{new_name.strip()}»"}
         return self._call(f)
 
+    # Ojo: NO usar GetColorPalette. En Pro Tools 2025.12 se cuelga y deja al SDK sin aceptar
+    # conexiones hasta reiniciar Pro Tools (visto en la prueba real, igual que GetEditSelection).
+    # Sin paleta no hay forma segura de elegir colores, así que SpotPad no pinta tracks ni markers.
     def color_palette(self):
-        def f(e):
-            from ptsl import ops
-            from ptsl import PTSL_pb2 as pt
-            op = _op('CId_GetColorPalette')(color_palette_target=pt.CPTarget_Tracks)
-            e.client.run(op)
-            return {"ok": True, "colors": list(op.response.color_list)}
-        return self._call(f)
+        return {"ok": True, "colors": []}
 
     def create_track(self, name: str, after_track: str, color_index: int = -1):
-        """Crea un track mono de audio justo después de after_track (queda en su carpeta) y le pone color."""
+        """Crea un track mono de audio justo después de after_track (queda en su carpeta)."""
         from ptsl import PTSL_pb2 as pt
-        from ptsl import ops
 
         def f(e):
             op = _op('CId_CreateNewTracks')(number_of_tracks=1, track_name=name.strip(), track_format=pt.TF_Mono,
@@ -1018,33 +1014,11 @@ class ProTools:
                                          insertion_point_track_name=after_track)
             e.client.run(op)
             created = list(getattr(op.response, "created_track_names", []) or []) or [name.strip()]
-            if color_index is not None and int(color_index) >= 0:
-                self._paint(e, created, int(color_index))
             return {"ok": True, "msg": f"Track «{created[0]}» creado", "track": created[0]}
         return self._call(f)
 
-    _color_offset = None        # si el índice de color de Pro Tools arranca en 0 o en 1 (se aprende al pintar)
-
-    def _paint(self, e, track_names, i):
-        """Pinta con el color i de la paleta y verifica leyendo el color que quedó; si quedó corrido, corrige."""
-        from ptsl import ops
-        from ptsl import PTSL_pb2 as pt
-        pal_op = _op('CId_GetColorPalette')(color_palette_target=pt.CPTarget_Tracks)
-        e.client.run(pal_op)
-        pal = [c.lower() for c in pal_op.response.color_list]
-        off = self._color_offset or 0
-        e.client.run(_op('CId_SetTrackColor')(track_names=track_names, color_index=i + off))
-        if self._color_offset is None and pal:
-            got = next((t.color.lower() for t in e.track_list() if t.name == track_names[0]), "")
-            if got and 0 <= i < len(pal) and got != pal[i] and got in pal:
-                self._color_offset = i - pal.index(got)
-                log.info("Colores: Pro Tools usa índices corridos en %s, corrijo", self._color_offset)
-                e.client.run(_op('CId_SetTrackColor')(track_names=track_names, color_index=i + self._color_offset))
-            elif got:
-                self._color_offset = 0
-
     def add_marker(self, name: str, color_index: int = -1):
-        """Marcador en el inicio de la selección actual (regla principal), con color opcional."""
+        """Marcador en el inicio de la selección actual (regla principal)."""
         from ptsl import PTSL_pb2 as pt
 
         def f(e):
@@ -1053,8 +1027,6 @@ class ProTools:
             start = tc(a) if tc else str(a)
             kw = dict(start_time=start, name=name.strip(), time_properties=pt.TP_Marker,
                       reference=pt.MLR_Absolute, location=pt.MarkerLocation_MainRuler)
-            if color_index is not None and int(color_index) >= 0:
-                kw["color_index"] = int(color_index) + (self._color_offset or 0)
             try:
                 e.create_memory_location(**kw)
             except TypeError:                # versiones de py-ptsl sin «location»
@@ -1291,7 +1263,7 @@ class MockProTools:
         return {"ok": True, "msg": f"Clip renombrado: «{new_name}» (mock)"}
 
     def color_palette(self):
-        return {"ok": True, "colors": ["#ff3E9B4F", "#ffC9567A", "#ff3B7DD8", "#ff8A5A2B", "#ffE8A33D", "#ff7c0089"]}
+        return {"ok": True, "colors": []}
 
     def create_track(self, name, after_track, color_index=-1):
         self._extra_tracks.append(name.strip())         # aparece en la carpeta de superficies
