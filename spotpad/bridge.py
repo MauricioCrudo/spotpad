@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1909,7 +1909,10 @@ def make_app(pt, rec=None):
 
     @routes.get("/")
     async def index(_):
-        return web.FileResponse(RES / "static" / "index.html")
+        # Sin caché: el iPad tiene que cargar siempre la página de la versión que está corriendo
+        html = (RES / "static" / "index.html").read_text("utf-8").replace("__SPOTPAD_VERSION__", VERSION)
+        return web.Response(text=html, content_type="text/html",
+                            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"})
 
     # Página para la Mac: QR + dirección para abrir SpotPad en el iPad
     @routes.get("/conectar")
@@ -1927,7 +1930,7 @@ def make_app(pt, rec=None):
         if st.get("connected") and st.get("session"):
             CURRENT["session"] = st["session"]
         last = EVENTS.items[-1] if EVENTS.items else None
-        return web.json_response({**st, "ev_seq": EVENTS.seq, "ev_last": last, "ev_status": EVENTS.status})
+        return web.json_response({**st, "version": VERSION, "ev_seq": EVENTS.seq, "ev_last": last, "ev_status": EVENTS.status})
 
     @routes.get("/api/events")
     async def events(req):

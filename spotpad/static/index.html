@@ -356,6 +356,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
 <div id="toast"></div>
 
 <script>
+const PAGE_VERSION = '__SPOTPAD_VERSION__';   // la pone el servidor; si SpotPad se actualiza, la página se recarga sola
 const $ = s => document.querySelector(s);
 let presets = [], catIdx = 0, tracks = [], targets = [], prefix = '', prefixOpts = [], lastClip = '';
 
@@ -377,6 +378,7 @@ function buzz(ok) { try { navigator.vibrate && navigator.vibrate(ok ? 15 : [40, 
 async function poll() {
   try {
     const s = await api('/api/status');
+    if (s.version && s.version !== PAGE_VERSION && !PAGE_VERSION.startsWith('__')) { location.reload(); return; }
     $('#dot').className = 'dot ' + (s.connected ? 'on' : 'off');
     document.body.classList.toggle('offline', !s.connected);
     // Al conectarse con Pro Tools, traer las carpetas de la sesión
