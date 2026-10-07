@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.10.0"
+VERSION = "0.10.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1035,7 +1035,24 @@ class ProTools:
             return {"ok": True, "msg": f"Marcador «{name.strip()}» en {start}"}
         return self._call(f)
 
-    def rec_go(self, start: int, end: int, rec_track_id: str, name: str, locate: bool = True):
+    VIEW_LOC = 999          # memory location de SpotPad para mover la ventana de edición
+
+    def _show_in_edit(self, e, start, end):
+        """El SDK no puede desplazar la ventana de edición, pero recordar un memory location sí lo hace.
+        SpotPad usa uno propio (n.º 999, tipo selección: no aparece en la regla de markers)."""
+        from ptsl import PTSL_pb2 as pt
+        tc = self._tc(e)
+        if not tc:
+            raise SpotError("no pude leer el timecode de la sesión")
+        kw = dict(number=self.VIEW_LOC, name="SpotPad", start_time=tc(int(start)), end_time=tc(int(end)),
+                  time_properties=pt.TP_Selection, reference=pt.MLR_Absolute)
+        try:
+            e.client.run(_op('CId_EditMemoryLocation')(**kw))
+        except Exception:                           # todavía no existe en esta sesión
+            e.client.run(_op('CId_CreateMemoryLocation')(**kw))
+        e.client.run(_op('CId_SelectMemoryLocation')(number=self.VIEW_LOC))
+
+    def rec_go(self, start: int, end: int, rec_track_id: str, name: str, locate: bool = True, view: bool = False):
         """Posiciona Pro Tools en el clip y renombra el track de grabación."""
         from ptsl import PTSL_pb2 as pt
 
@@ -1046,6 +1063,12 @@ class ProTools:
             if locate:
                 e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
                                          location_type=pt.TLType_Samples)
+                if view:
+                    try:
+                        self._show_in_edit(e, start, end)
+                    except Exception as ex:          # noqa: BLE001
+                        log.info("Mover la vista: %s", ex)
+                        notes.append("no pude mover la vista")
                 if self._selection_samples(e) != (int(start), int(end)):
                     notes.append("no pude posicionar Pro Tools en el clip")
             msg = "Posicionado" if locate else "Listo"
@@ -1272,7 +1295,7 @@ class MockProTools:
     def add_marker(self, name, color_index=-1):
         return {"ok": True, "msg": f"Marcador «{name}» (mock)"}
 
-    def rec_go(self, start, end, rec_track_id, name, locate=True):
+    def rec_go(self, start, end, rec_track_id, name, locate=True, view=False):
         if not rec_track_id:
             return {"ok": True, "msg": "Posicionado (mock) · sin track de grabación elegido"}
         t = next((t for t in self._tracks if t["id"] == rec_track_id), None)
@@ -1498,7 +1521,7 @@ class RecController:
     # -- persistencia ---------------------------------------------------------- #
     def store(self):
         return load_json(REC_FILE, {"rec_track": "", "sweep": [], "surface_filter": "", "text_filter": "", "auto_rename": True,
-                                    "cur": "", "follow": False, "sessions": {}})
+                                    "cur": "", "follow": False, "move_view": False, "sessions": {}})
 
     def save(self, st):
         REC_FILE.write_text(json.dumps(st, indent=2, ensure_ascii=False), "utf-8")
@@ -1506,7 +1529,7 @@ class RecController:
     def set_state(self, patch):
         with self.lock:
             st = self.store()
-            for k in ("rec_track", "sweep", "surface_filter", "text_filter", "auto_rename", "cur", "follow"):
+            for k in ("rec_track", "sweep", "surface_filter", "text_filter", "auto_rename", "cur", "follow", "move_view"):
                 if k in patch:
                     st[k] = patch[k]
             self.save(st)
@@ -1612,7 +1635,8 @@ class RecController:
                 st["cur"] = key
                 self.save(st)
             do_rename = st.get("auto_rename", True) if rename is None else bool(rename)
-            r = self.pt.rec_go(start, end, st.get("rec_track", ""), name.strip() if do_rename else "")
+            r = self.pt.rec_go(start, end, st.get("rec_track", ""), name.strip() if do_rename else "",
+                               view=bool(st.get("move_view")))
             return {**r, "cur": key or st.get("cur", "")}
 
     def _go_item(self, it, st):

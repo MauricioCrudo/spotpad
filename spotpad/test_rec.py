@@ -72,3 +72,20 @@ assert got == ["Prps Chair Drag"], got
 rec.set_state({"text_filter": ""})
 assert len(rec.build()["items"]) == 3
 print("filtro texto OK")
+
+# --- Mover la vista: _show_in_edit edita el memory location 999 (o lo crea) y lo trae ---
+import types
+from tc import TcConverter, rate_from_enum
+ran = []
+class VC:
+    exists = False
+    def run(s, op):
+        n = type(op).__name__; ran.append(n)
+        if n == "CId_EditMemoryLocation" and not s.exists: raise RuntimeError("no existe")
+        if n == "CId_CreateMemoryLocation": s.exists = True
+pv = ProTools(); pv._tc = lambda e: TcConverter(48000, "01:00:00:00", rate_from_enum("STCR_Fps24"))
+ev = types.SimpleNamespace(client=VC())
+pv._show_in_edit(ev, 48000, 96000); pv._show_in_edit(ev, 0, 48000)
+assert ran == ["CId_EditMemoryLocation", "CId_CreateMemoryLocation", "CId_SelectMemoryLocation",
+               "CId_EditMemoryLocation", "CId_SelectMemoryLocation"], ran
+print("vista OK")

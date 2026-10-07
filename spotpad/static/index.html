@@ -409,6 +409,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
     <div><div class="lbl2">Solo los que dicen (p. ej. «metal»; vacío = todos)</div><input id="recText" placeholder="palabra del nombre del clip" autocomplete="off" autocapitalize="none" style="width:100%"></div>
     <div><div class="lbl2">Track de grabación (se renombra solo)</div><select id="recTrack"></select></div>
     <label class="tog"><input type="checkbox" id="recAuto"> Renombrar el track al ir a cada clip</label>
+    <label class="tog"><input type="checkbox" id="recView"> Mover la vista de Pro Tools a cada clip (prueba)</label>
     <label class="tog"><input type="checkbox" id="recFollow"> Seguir Pro Tools (clic en un clip de spotting → aparece acá)</label>
     <label class="tog"><input type="checkbox" id="recShowDone"> Mostrar también los ya grabados</label>
     <div style="display:flex;gap:8px"><button class="hbtn" id="recRefresh" style="flex:1">Leer sesión</button><button class="hbtn" id="recRulesBtn">Reglas de pasos</button></div>
@@ -1199,6 +1200,7 @@ async function recEnter() {
   recSt = await api('/api/rec/state').catch(() => ({}));
   $('#recAuto').checked = recSt.auto_rename !== false;
   $('#recFollow').checked = !!recSt.follow;
+  $('#recView').checked = !!recSt.move_view;
   recTracks = await api('/api/tracks').catch(() => []);
   const r = await api('/api/rec/queue').catch(() => null);
   if (r && !r.need_refresh) recApply(r); else await recRefresh();
@@ -1263,6 +1265,8 @@ $('#recSurf').onchange = e => { recSt.surface_filter = e.target.value; recPutSta
 $('#recTrack').onchange = e => { recSt.rec_track = e.target.value; recPutState({rec_track: recSt.rec_track}); };
 $('#recAuto').onchange = e => { recSt.auto_rename = e.target.checked; recPutState({auto_rename: recSt.auto_rename}); };
 $('#recShowDone').onchange = () => recRender();
+$('#recView').onchange = e => { recSt.move_view = e.target.checked; recPutState({move_view: recSt.move_view});
+  toast(recSt.move_view ? 'Siguiente y Anterior van a mover la vista (usa el memory location 999 «SpotPad»)' : 'La vista no se mueve'); };
 $('#recFollow').onchange = e => { recSt.follow = e.target.checked; recPutState({follow: recSt.follow});
   toast(recSt.follow ? 'Siguiendo Pro Tools: hacé clic en un clip de spotting' : 'Ya no sigo a Pro Tools'); };
 $('#recRefresh').onclick = recRefresh;
