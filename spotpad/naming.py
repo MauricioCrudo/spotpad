@@ -70,6 +70,19 @@ def nice(s: str, rules) -> str:
     return s
 
 
+def strip_suffix(s: str) -> str:
+    """Saca lo que Pro Tools agrega después de un punto: «Hands body.grp.01» → «Hands body»
+    (en cada palabra, por si el clip quedó en el medio del nombre)."""
+    words = [w.split(".")[0] for w in re.sub(r"\s+", " ", str(s or "")).strip().split(" ")]
+    return " ".join(w for w in words if w)
+
+
+def tidy(name: str) -> str:
+    """Nombre final del track de grabación: sin sufijos de Pro Tools y cada palabra con la
+    primera en mayúscula y el resto en minúscula («PRPS hands TABLE wood.grp.01» → «Prps Hands Table Wood»)."""
+    return " ".join(w[:1].upper() + w[1:].lower() for w in strip_suffix(name).split(" ") if w)
+
+
 def _shoes(rules):
     return sorted(rules.get("shoes", []), key=lambda x: -len(x["key"]))
 
@@ -148,6 +161,7 @@ def build_queue(tracks: List[dict], edl: Dict[str, list], sweep: List[str], rule
         cls = classify_fts(tname, rules) if kind == "footsteps" else None
         for ev in edl.get(tname, []):
             key = f"{tname}|{ev.start}"
+            raw_clip = strip_suffix(ev.clip)
             it = {"key": key, "track": tname, "clip": ev.clip, "start": ev.start, "end": ev.end,
                   "muted": bool(getattr(ev, "muted", False)), "done": key in done, "kind": kind or "other",
                   "needs": []}
@@ -164,15 +178,15 @@ def build_queue(tracks: List[dict], edl: Dict[str, list], sweep: List[str], rule
                 if surface_filter and surface_filter not in (under if not surface else [surface]):
                     continue
                 if cls["type"] == "shoe":
-                    clip = (ev.clip or "").strip()
+                    clip = raw_clip
                     generic = not clip or base_name(clip) == base_name(tname) or norm(clip) == norm(cls["shoe"])
                     character = None if generic else clip
                     shoe, shoe_src = cls["shoe"], "track"
                 else:
                     character = cls["character"]
                     shoe, shoe_src = cls["shoe"], "track"
-                    if shoe_in(ev.clip, rules):
-                        shoe, shoe_src = shoe_in(ev.clip, rules), "clip"
+                    if shoe_in(raw_clip, rules):
+                        shoe, shoe_src = shoe_in(raw_clip, rules), "clip"
                     elif not shoe and ch.get("shoe"):
                         shoe, shoe_src = ch["shoe"], "elegido"
                     elif not shoe and char_shoes.get(norm(character)):
@@ -186,7 +200,7 @@ def build_queue(tracks: List[dict], edl: Dict[str, list], sweep: List[str], rule
                 parts = [fts, nice(character, rules) if character else None, shoe,
                          surf_label(surface) if surface else None]
             else:
-                clip = (ev.clip or "").strip()
+                clip = raw_clip
                 pre = fts if kind == "surfaces" else prps
                 body = clip if clip else tname
                 if norm(body).startswith(norm(pre) + " "):
@@ -195,7 +209,7 @@ def build_queue(tracks: List[dict], edl: Dict[str, list], sweep: List[str], rule
             if ch.get("name"):
                 it["name"], it["name_src"] = ch["name"], "editado"
             else:
-                it["name"], it["name_src"] = " ".join(p for p in parts if p), "auto"
+                it["name"], it["name_src"] = tidy(" ".join(p for p in parts if p)), "auto"
             items.append(it)
     items.sort(key=lambda x: (x["start"], x["track"]))
     shoe_labels = []

@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.8.2"
+VERSION = "0.8.3"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -219,10 +219,11 @@ def build_report(pt) -> str:
 
 def track_name_for(prefix: str, clip: str) -> str:
     """«Prps» + «Hands clap» → «Prps Hands clap». Si el clip ya trae el prefijo, no lo duplica."""
+    from naming import tidy
     clip = clip.strip()
     if not prefix or clip.lower().startswith(prefix.lower() + " "):
-        return clip
-    return f"{prefix} {clip}"
+        return tidy(clip)
+    return tidy(f"{prefix} {clip}")
 
 log = logging.getLogger("spotpad")
 
@@ -1062,7 +1063,7 @@ class ProTools:
                 target = next((t for t in tracks if t.id == rec_track_id), None)
                 if target is None:
                     raise SpotError("El track de grabación ya no existe: elegilo de nuevo")
-                new = name.strip()
+                new = naming.tidy(name)          # «Prps Hands Table Wood», sin «.grp.01»
                 if target.name != new:
                     taken = {t.name for t in tracks if t.id != rec_track_id}
                     base, n = new, 2
@@ -1288,6 +1289,7 @@ class MockProTools:
             raise SpotError("El track de grabación ya no existe: elegilo de nuevo")
         if not name:
             return {"ok": True, "msg": "Posicionado (mock)"}
+        name = naming.tidy(name)
         t["name"] = name
         return {"ok": True, "msg": f"Track de grabación: «{name}» (mock)"}
 

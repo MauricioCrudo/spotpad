@@ -109,6 +109,7 @@ Para el grabador: barre el spotting clip por clip y deja el track de grabación 
 4. **Pendiente** = no muteado en Pro Tools y no marcado. Podés mutear el clip de spotting como siempre (Cmd+M; se ve al tocar «Leer sesión») o tocar **✓ Grabado**, que lo marca en SpotPad y pasa al siguiente.
 
 **Nombres sugeridos** (tocá el nombre para editarlo; la edición queda guardada para ese clip):
+- El nombre siempre queda con **cada palabra en mayúscula inicial y el resto en minúscula**, y **sin lo que Pro Tools agrega después de un punto** en los clips (`Chair sit.grp.01` → *Prps Chair Sit*). Vale también para los nombres editados a mano.
 - Props: `Prps` + nombre del clip group → *Prps Chair sit*.
 - Pasos: `Fts` + personaje + calzado + superficie → *Fts Kyle Sneakers Hardwood*.
   - Track de **personaje** (KYLE, JUNE): el calzado sale del nombre del clip si lo trae (*Kyle Barefoot*), si no del fijado para ese personaje, si no del **color del track** (el mismo color que el track de calzado: celeste = SNEAKERS). *EMILY HEELS* = Emily con Heels.

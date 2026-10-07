@@ -48,7 +48,7 @@ assert k9["name"] == "Fts Kyle Sneakers"                                 # sin s
 assert by[("SNEAKERS 01", 1500)]["name"] == "Fts Extra Left Sneakers Clean Concrete Interior"
 assert by[("SNEAKERS 01", 1700)]["name"] == "Fts Sneakers Clean Concrete Interior"   # clip genérico: sin personaje
 assert by[("JUNE", 100)]["needs"] == ["shoe"] and by[("JUNE", 100)]["name"] == "Fts June Hardwood"
-assert by[("Chairs", 50)]["name"] == "Prps Chair sit"
+assert by[("Chairs", 50)]["name"] == "Prps Chair Sit"
 
 # Elecciones guardadas + alias de superficie + calzado fijo del personaje
 r2 = copy.deepcopy(R); r2["surface_alias"] = {"Clean Concrete Interior": "Clean"}; r2["char_shoes"] = {"JUNE": "Fem Shoes"}
@@ -66,3 +66,20 @@ assert {(i["track"], i["start"]) for i in q3["items"]} == {("KYLE", 100), ("KYLE
 q4 = build_queue(tracks, edl, ["Chairs"], R, {"Chairs|50": {"name": "Prps Chair Sit Wood"}}, set())
 assert q4["items"][0]["name"] == "Prps Chair Sit Wood"
 print("naming OK")
+
+# --- Formato del nombre de grabación: palabras con mayúscula inicial y sin sufijos de Pro Tools ---
+from naming import tidy, strip_suffix, build_queue, DEFAULT_RULES
+from edl import EdlEvent
+assert tidy("PRPS hands TABLE wood.grp.01") == "Prps Hands Table Wood"
+assert tidy("Prps Chair sit.01") == "Prps Chair Sit"
+assert tidy("Fts Henry.grp.3 Male Shoes Grass") == "Fts Henry Male Shoes Grass"
+assert strip_suffix("Sneakers.grp.01") == "Sneakers"
+tr = [{"name": "Chairs", "color": "", "folder": "PRPS"}, {"name": "Grass", "color": "", "folder": "SUPERFICIES"},
+      {"name": "SNEAKERS", "color": "", "folder": "FTS"}]
+edl = {"Chairs": [EdlEvent("Chairs", "chair SIT.grp.01", 0, 10)],
+       "Grass": [EdlEvent("Grass", "Grass.grp.02", 0, 100)],
+       "SNEAKERS": [EdlEvent("SNEAKERS", "Sneakers.grp.04", 20, 30), EdlEvent("SNEAKERS", "extra LEFT.grp.1", 40, 50)]}
+q = build_queue(tr, edl, ["Chairs", "SNEAKERS"], DEFAULT_RULES, {}, set())
+names = [i["name"] for i in q["items"]]
+assert names == ["Prps Chair Sit", "Fts Sneakers Grass", "Fts Extra Left Sneakers Grass"], names
+print("formato OK")

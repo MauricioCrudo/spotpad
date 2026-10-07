@@ -38,8 +38,8 @@ assert pt._tracks[2]["name"] == "Fts Henry Male Shoes Wood"
 assert rec.follow_tick() is None                    # misma selección: no repite
 pt.mock_sel = {"tracks": ["Chairs"], "in": 8 * 48000, "out": 9 * 48000}   # track que no se barre
 it = rec.follow_tick()
-assert it["name"] == "Prps Chair sit" and any(i.get("extra") and i["key"] == it["key"] for i in rec.build()["items"])
-assert pt._tracks[2]["name"] == "Prps Chair sit"
+assert it["name"] == "Prps Chair Sit" and any(i.get("extra") and i["key"] == it["key"] for i in rec.build()["items"])
+assert pt._tracks[2]["name"] == "Prps Chair Sit"
 
 # --- Avisos: sesión cerrada → la foto de la sesión se descarta ---
 assert rec.snap is not None
