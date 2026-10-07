@@ -46,6 +46,11 @@ python3 bridge.py --debug  # loguea cada comando PTSL (útil si algo falla)
 Al arrancar muestra la dirección (p. ej. `http://192.168.0.20:8765`). Abrila en Safari del iPad → Compartir → **Agregar a inicio** para usarla a pantalla completa.
 La primera vez macOS va a preguntar si permite conexiones entrantes a Python: aceptá.
 
+## Diseño y temas
+- **Temas:** ⚙︎ (o tocar el nombre de la sesión) → *Ajustes*: Automático (sigue el modo claro/oscuro del sistema), Estudio, Cabina, Noche y Día. Se guarda en cada dispositivo.
+- **Teléfono:** las vistas pasan a una barra abajo; en Grabar, el clip y los botones quedan arriba y la configuración debajo.
+- **Botonera:** REF, Escena y Deshacer están abajo, al alcance del pulgar.
+
 ## Botonera, Carpetas y Proyecto
 - **Botonera:** solo categorías — **Superficies**, **Pasos** y **Props** (los tracks de esas carpetas, aunque estén dentro de otra), las categorías preseteadas (*Manos*…) y **★ Proyecto**.
 - **Carpetas:** la sesión tal cual, una pestaña por carpeta, con **Ocultos** e **Inactivos** (para ver que todo esté, o marcar algo rápido).
