@@ -83,3 +83,14 @@ q = build_queue(tr, edl, ["Chairs", "SNEAKERS"], DEFAULT_RULES, {}, set())
 names = [i["name"] for i in q["items"]]
 assert names == ["Prps Chair Sit", "Fts Sneakers Grass", "Fts Extra Left Sneakers Grass"], names
 print("formato OK")
+
+# --- REF: marca el clip de spotting pero nunca va al track de grabación ---
+from naming import has_ref
+assert tidy("Prps Chair sit REF") == "Prps Chair Sit" and tidy("REF Chair sit.grp.01") == "Chair Sit"
+assert has_ref("Chair sit REF") and has_ref("ref Chair") and not has_ref("Refrigerator")
+q = build_queue([{"name": "Chairs", "color": "", "folder": "PRPS"}],
+                {"Chairs": [EdlEvent("Chairs", "Chair sit REF.grp.01", 0, 10)]}, ["Chairs"], DEFAULT_RULES, {}, set())
+assert q["items"][0]["name"] == "Prps Chair Sit" and q["items"][0]["ref"], q["items"][0]
+from bridge import with_ref
+assert with_ref("Chair sit") == "Chair sit REF" and with_ref("Chair REF") == "Chair REF" and with_ref("") == "REF"
+print("ref OK")

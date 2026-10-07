@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.8.3"
+VERSION = "0.9.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -63,6 +63,7 @@ SPOT_TRACKS_FILE = DATA / "spot_tracks.json"   # tracks que muestra la lista de 
 DIAG_FILE = DATA / "diag.txt"
 HIDDEN_FILE = DATA / "hidden.json"      # carpetas y tracks ocultos en la botonera (por nombre)
 RULES_FILE = DATA / "footsteps.json"    # reglas de nombres de pasos (calzados, colores, alias de superficies)
+PROJECTS_FILE = DATA / "proyectos.json"  # nombres escritos a mano, por proyecto y track
 SETTINGS_FILE = DATA / "settings.json"  # funciones en segundo plano (avisos de Pro Tools)
 REC_FILE = DATA / "rec.json"            # modo grabación: track de grabación, qué barrer, elecciones por sesión
 
@@ -80,15 +81,19 @@ def load_rules() -> dict:
     return r
 
 
-def top_folders(infos) -> dict:
-    """nombre de track → carpeta de primer nivel (o "")."""
+def top_folders(infos, rules=None) -> dict:
+    """nombre de track → carpeta que define su tipo: la más cercana que sea de superficies, pasos o
+    props (aunque esté dentro de otra carpeta, p. ej. SPOTTING › FTS); si ninguna lo es, la de primer nivel."""
     by_id = {t["id"]: t for t in infos}
     out = {}
     for t in infos:
-        pid, top, seen = t["parent_id"], "", set()
+        pid, chain, seen = t["parent_id"], [], set()
         while pid and pid in by_id and pid not in seen:
-            seen.add(pid); top = by_id[pid]["name"]; pid = by_id[pid]["parent_id"]
-        out[t["name"]] = top or t.get("parent_name", "")
+            seen.add(pid); chain.append(by_id[pid]["name"]); pid = by_id[pid]["parent_id"]
+        if not chain and t.get("parent_name"):
+            chain = [t["parent_name"]]
+        hit = next((c for c in chain if rules and naming.folder_kind(c, rules)), None)
+        out[t["name"]] = hit or (chain[-1] if chain else "")
     return out
 LOG_FILE = DATA / "spotpad.log"
 
@@ -275,7 +280,8 @@ def build_layout(tracks, exclude=()):
             out = [{"id": "name:" + t["parent_name"], "name": t["parent_name"], "index": t["index"]}]
         return out
 
-    tabs, off = {}, {}
+    rules = load_rules()
+    tabs, off, kinds = {}, {}, {}
     for t in sorted(tracks, key=lambda t: t["index"]):
         if t.get("inactive"):
             # Para la pestaña «Inactivos»: solo el de más arriba (si la carpeta está inactiva,
@@ -298,8 +304,21 @@ def build_layout(tracks, exclude=()):
         if not tab["groups"] or tab["groups"][-1]["name"] != gname:
             tab["groups"].append({"name": gname, "tracks": []})
         tab["groups"][-1]["tracks"].append({"id": t["id"], "name": t["name"], "color": t["color"]})
+        # Botonera por categorías: la carpeta más cercana que sea de superficies, pasos o props
+        ki = next((i for i in range(len(folders) - 1, -1, -1) if naming.folder_kind(folders[i]["name"], rules)), None)
+        if ki is not None:
+            kind = naming.folder_kind(folders[ki]["name"], rules)
+            kt = kinds.setdefault(kind, {"kind": kind, "label": KIND_LABEL[kind], "groups": []})
+            g2 = " › ".join(f["name"] for f in folders[ki + 1:])
+            if not kt["groups"] or kt["groups"][-1]["name"] != g2:
+                kt["groups"].append({"name": g2, "tracks": []})
+            kt["groups"][-1]["tracks"].append({"id": t["id"], "name": t["name"], "color": t["color"]})
     return {"tabs": sorted(tabs.values(), key=lambda x: x["index"]),
+            "kinds": [kinds[k] for k in ("surfaces", "footsteps", "props") if k in kinds],
             "inactive": [{"name": k, "tracks": v} for k, v in off.items()]}
+
+
+KIND_LABEL = {"surfaces": "Superficies", "footsteps": "Pasos", "props": "Props"}
 
 
 class SpotError(Exception):
@@ -556,7 +575,7 @@ class ProTools:
             if state != "TS_TransportStopped":
                 return {"busy": state}
             infos = [track_info(t, pt) for t in e.track_list()]
-            tops = top_folders(infos)
+            tops = top_folders(infos, load_rules())
             tracks = [{"id": t["id"], "name": t["name"], "folder": tops.get(t["name"], ""),
                        "inactive": t["inactive"]} for t in infos if "Folder" not in t["type"]]
             b = e.export_session_as_text()
@@ -676,7 +695,7 @@ class ProTools:
         clip = (name or target.name).strip()
         log.info("group-on: renombrar a «%s»", clip)
         e.rename_selected_clip(new_name=clip, rename_file=False, clip_location=pt.CL_Timeline)
-        return {"ok": True, "msg": f"«{clip}» en {target.name}"}
+        return {"ok": True, "msg": f"«{clip}» en {target.name}", "track": target.name, "clip": clip}
 
     def diag(self):
         """Lo que hace falta ver de tu sesión real, en texto para pegar."""
@@ -857,7 +876,7 @@ class ProTools:
             if state != "TS_TransportStopped":
                 return {"paused": True, "state": state}
             infos = [track_info(t, pt) for t in e.track_list()]
-            tops = top_folders(infos)
+            tops = top_folders(infos, load_rules())
             tracks = [{"id": t["id"], "name": t["name"], "color": t["color"], "folder": tops.get(t["name"], "")}
                       for t in infos if "Folder" not in t["type"] and not t["inactive"]]
             b = e.export_session_as_text()
@@ -1202,7 +1221,7 @@ class MockProTools:
             raise SpotError("Ese track ya no existe en la sesión")
         clip = (name or t["name"]).strip()
         self._last = clip
-        return {"ok": True, "msg": f"«{clip}» en {t['name']} (mock)"}
+        return {"ok": True, "msg": f"«{clip}» en {t['name']} (mock)", "track": t["name"], "clip": clip}
 
     def health(self):
         return {"connected_once": True, "connections": 1, "stuck": False, "inflight": None,
@@ -1506,7 +1525,7 @@ class RecController:
 
     # -- persistencia ---------------------------------------------------------- #
     def store(self):
-        return load_json(REC_FILE, {"rec_track": "", "sweep": [], "surface_filter": "", "auto_rename": True,
+        return load_json(REC_FILE, {"rec_track": "", "sweep": [], "surface_filter": "", "text_filter": "", "auto_rename": True,
                                     "cur": "", "follow": False, "sessions": {}})
 
     def save(self, st):
@@ -1515,7 +1534,7 @@ class RecController:
     def set_state(self, patch):
         with self.lock:
             st = self.store()
-            for k in ("rec_track", "sweep", "surface_filter", "auto_rename", "cur", "follow"):
+            for k in ("rec_track", "sweep", "surface_filter", "text_filter", "auto_rename", "cur", "follow"):
                 if k in patch:
                     st[k] = patch[k]
             self.save(st)
@@ -1545,6 +1564,10 @@ class RecController:
                                None if sweep is not None else (st.get("surface_filter") or None), snap["tc"])
         if sweep is not None:
             return q
+        words = [naming.norm(w) for w in str(st.get("text_filter") or "").split() if w]
+        if words:      # «metal»: primero una parte de la categoría, después la otra
+            q["items"] = [i for i in q["items"]
+                          if all(w in naming.norm(f"{i.get('clip', '')} {i['name']}") for w in words)]
         cur = st.get("cur", "")
         fi = self.follow_item
         if cur and fi and fi["key"] == cur and not any(i["key"] == cur for i in q["items"]):
@@ -1625,7 +1648,8 @@ class RecController:
         r = self.go_to(it["key"], it["start"], it["end"], it["name"], rename)
         if it["needs"]:
             what = " y ".join({"surface": "la superficie", "shoe": "el calzado"}[n] for n in it["needs"])
-            r["msg"] = f"Posicionado · falta elegir {what} en el iPad"
+            r["msg"] = f"Posicionado · falta elegir {what}"
+            r["needs"], r["options"] = it["needs"], self.options_for(it)
         return {**r, "item": it}
 
     def step(self, direction):
@@ -1740,14 +1764,137 @@ class RecController:
                     if hits:
                         it = max(hits, key=lambda i: min(i["end"], max(sel["out"], sel["in"] + 1))
                                                      - max(i["start"], sel["in"]))
+                        self.follow_item = it            # el iPad lo muestra aunque ese track no se esté barriendo
                         if it["needs"]:
                             st["cur"] = it["key"]; self.save(st)
                             what = " y ".join({"surface": "la superficie", "shoe": "el calzado"}[n] for n in it["needs"])
-                            raise SpotError(f"«{it['name']}»: falta elegir {what} (en la pestaña Grabar)")
+                            return {"ok": True, "needs": it["needs"], "options": self.options_for(it, q),
+                                    "item": it, "cur": it["key"],
+                                    "msg": f"«{it['name']}»: falta elegir {what}"}
                         r = self.pt.rec_go(it["start"], it["end"], st["rec_track"], it["name"], locate=False)
                         st["cur"] = it["key"]; self.save(st)
                         return {**r, "item": it, "cur": it["key"]}
-            raise SpotError("No encontré un clip de spotting bajo la selección")
+            known = {t["name"]: t["folder"] for t in self.snap["tracks"]} if self.snap else {}
+            for tname in sel["tracks"]:
+                if tname in known and not naming.folder_kind(known[tname], load_rules()):
+                    raise SpotError(f"«{tname}» está en la carpeta «{known[tname] or 'ninguna'}», que no es de "
+                                    "pasos, props ni superficies (los nombres de carpeta se configuran en las reglas)")
+            raise SpotError("No encontré un clip de spotting bajo la selección "
+                            f"(tracks seleccionados: {', '.join(sel['tracks']) or 'ninguno'})")
+
+    def options_for(self, it, q=None):
+        """Opciones para lo que falta elegir de un paso: superficies debajo o calzados."""
+        out = {}
+        if "surface" in it.get("needs", []):
+            out["surface"] = list(it.get("surfaces") or [])
+        if "shoe" in it.get("needs", []):
+            out["shoe"] = list((q or {}).get("shoes") or [s["label"] for s in load_rules().get("shoes", [])])
+            out["shoe"] = list(dict.fromkeys(out["shoe"]))
+        return out
+
+    def choose(self, key, values: dict):
+        """Guarda lo elegido (superficie/calzado) para un clip y renombra el track de grabación."""
+        self.choice({"key": key, **{k: v for k, v in values.items() if k in ("surface", "shoe")}})
+        with self.lock:
+            st = self.store()
+            it = next((i for i in self.build(st, sweep=[key.split("|")[0]])["items"] if i["key"] == key), None)
+            if it is None:
+                raise SpotError("Ese clip ya no está en la sesión")
+            st["cur"] = key; self.save(st)
+            if it["needs"]:
+                return {"ok": True, "needs": it["needs"], "item": it, "msg": f"«{it['name']}»: falta elegir"}
+            if not st.get("rec_track"):
+                return {"ok": True, "item": it, "msg": f"Elegido: «{it['name']}»"}
+            r = self.pt.rec_go(it["start"], it["end"], st["rec_track"], it["name"], locate=False)
+            return {**r, "item": it, "cur": key}
+
+
+# --------------------------------------------------------------------------- #
+#  Nombres del proyecto: lo que se escribe a mano en la botonera queda para repetirlo
+# --------------------------------------------------------------------------- #
+_NOISE = {"ep", "cap", "capitulo", "capítulo", "episodio", "reel", "rollo", "foley", "spotting", "spot", "fx", "sfx", "rec", "grabacion", "grabación", "sesion", "sesión",
+          "session", "mix", "final", "copy", "copia"}
+
+
+def default_project(session: str) -> str:
+    """«Serie_EP03_Foley» → «Serie»: sin números de capítulo/rollo/versión ni palabras de sesión."""
+    words = [w for w in re.split(r"[\s_\-.]+", session or "") if w]
+    keep = [w for w in words if w.lower() not in _NOISE
+            and not re.fullmatch(r"(?i)(ep|e|cap|ch|r|reel|rollo|v|ver|t|s)?\d+[a-z]?", w)]
+    return " ".join(keep) or (session or "").strip()
+
+
+class Projects:
+    def __init__(self, path):
+        self.path, self.lock = path, threading.Lock()
+
+    def _load(self):
+        d = load_json(self.path, {})
+        d.setdefault("session_project", {}); d.setdefault("projects", {})
+        return d
+
+    def _save(self, d):
+        self.path.write_text(json.dumps(d, indent=1, ensure_ascii=False), "utf-8")
+
+    def project_for(self, session: str) -> str:
+        return self._load()["session_project"].get(session) or default_project(session)
+
+    def set_project(self, session: str, project: str):
+        with self.lock:
+            d = self._load()
+            project = re.sub(r"\s+", " ", project or "").strip()
+            old = d["session_project"].get(session) or default_project(session)
+            if project and project != old:          # lo ya guardado pasa al proyecto nuevo (sin duplicar)
+                dst = d["projects"].setdefault(project, [])
+                have = {(i["track"], i["name"].lower()) for i in dst}
+                dst += [dict(i) for i in d["projects"].get(old, []) if (i["track"], i["name"].lower()) not in have]
+            if project and project != default_project(session):
+                d["session_project"][session] = project
+            else:
+                d["session_project"].pop(session, None)
+            self._save(d)
+
+    def add(self, session: str, track: str, name: str):
+        name = re.sub(r"\s+", " ", name or "").strip()
+        if not session or not track or not name:
+            return
+        with self.lock:
+            d = self._load()
+            items = d["projects"].setdefault(self.project_for(session), [])
+            it = next((i for i in items if i["track"] == track and i["name"].lower() == name.lower()), None)
+            if it is None:
+                items.append({"track": track, "name": name, "uses": 1, "last": int(time.time())})
+            else:
+                it["uses"] += 1; it["last"] = int(time.time())
+            self._save(d)
+
+    def remove(self, session: str, track: str, name: str):
+        with self.lock:
+            d = self._load()
+            items = d["projects"].get(self.project_for(session), [])
+            d["projects"][self.project_for(session)] = [
+                i for i in items if not (i["track"] == track and i["name"].lower() == name.lower())]
+            self._save(d)
+
+    def view(self, session: str) -> dict:
+        proj = self.project_for(session)
+        items = self._load()["projects"].get(proj, [])
+        by = {}
+        for i in sorted(items, key=lambda i: i["name"].lower()):
+            by.setdefault(i["track"], []).append(i["name"])
+        known = sorted(self._load()["projects"].keys())
+        return {"project": proj, "session": session, "default": default_project(session),
+                "tracks": [{"track": t, "names": n} for t, n in by.items()], "known": known}
+
+
+PROJECTS = Projects(PROJECTS_FILE)
+
+
+def with_ref(name: str) -> str:
+    """«Chair sit» → «Chair sit REF» (sin duplicar). El track de grabación nunca lleva el Ref."""
+    name = (name or "").strip()
+    return name if naming.has_ref(name) else (f"{name} REF" if name else "REF")
+CURRENT = {"session": ""}       # sesión abierta (la actualiza /api/status)
 
 
 def make_app(pt, rec=None):
@@ -1777,6 +1924,8 @@ def make_app(pt, rec=None):
             st = await loop.run_in_executor(None, pt.status)
         except SpotError as e:
             st = {"connected": False, "error": str(e)}
+        if st.get("connected") and st.get("session"):
+            CURRENT["session"] = st["session"]
         last = EVENTS.items[-1] if EVENTS.items else None
         return web.json_response({**st, "ev_seq": EVENTS.seq, "ev_last": last, "ev_status": EVENTS.status})
 
@@ -1826,6 +1975,8 @@ def make_app(pt, rec=None):
         track = str(body.get("track", "") or "").strip()
         if not name:
             return web.json_response({"ok": False, "error": "Falta el nombre"}, status=400)
+        if body.get("ref"):
+            name = with_ref(name)
         if track:
             return await run(pt.group_on_named, track, name)
         return await run(pt.group_and_name, name)
@@ -1912,7 +2063,40 @@ def make_app(pt, rec=None):
             body = await req.json()
         except Exception:
             body = {}
-        return await run(pt.group_on_track, req.match_info["track_id"], str(body.get("name", "")))
+        name = str(body.get("name", "")).strip()
+        ref = bool(body.get("ref"))
+        tid = req.match_info["track_id"]
+        clip = name
+        if ref:                                    # «REF» al final: el nombre del track si no escribiste nada
+            base = name or next((x["name"] for tab in (await asyncio.get_running_loop().run_in_executor(
+                None, pt.layout, excluded()))["tabs"] for g in tab["groups"] for x in g["tracks"] if x["id"] == tid), "")
+            clip = with_ref(base)
+        resp = await run(pt.group_on_track, tid, clip)
+        if name and resp.status == 200:            # escrito a mano: queda en la pestaña del proyecto (sin «REF»)
+            try:
+                r = json.loads(resp.body)
+                PROJECTS.add(CURRENT["session"], r.get("track", ""), name)
+            except Exception:                      # noqa: BLE001
+                log.exception("proyecto")
+        return resp
+
+    @routes.get("/api/project")
+    async def project_get(_):
+        return web.json_response(PROJECTS.view(CURRENT["session"]))
+
+    @routes.put("/api/project")
+    async def project_put(req):
+        body = await req.json()
+        if not CURRENT["session"]:
+            return web.json_response({"ok": False, "error": "No hay sesión abierta"}, status=409)
+        PROJECTS.set_project(CURRENT["session"], str(body.get("project", "")))
+        return web.json_response(PROJECTS.view(CURRENT["session"]))
+
+    @routes.post("/api/project/remove")
+    async def project_remove(req):
+        body = await req.json()
+        PROJECTS.remove(CURRENT["session"], str(body.get("track", "")), str(body.get("name", "")))
+        return web.json_response(PROJECTS.view(CURRENT["session"]))
 
     # Atajo por nombre de track: /api/group-on-name/Wood
     @routes.post("/api/group-on-name/{name:[^/]+}")

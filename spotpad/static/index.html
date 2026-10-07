@@ -82,6 +82,7 @@ body.editing .tpad{outline:1.5px dashed var(--line);outline-offset:-4px}
 .fbar{display:none;gap:8px;margin-bottom:10px;align-items:center;color:var(--dim);font-size:13px}
 body.editing .fbar,.fbar.always{display:flex}
 .fbar span{flex:1}
+#refBtn.on{background:var(--acc,#e8a33d);color:#111;border-color:transparent;font-weight:700}
 .cat.hiddentab{border-style:dotted}
 .tpad.offpad{opacity:.55;filter:grayscale(.7)}
 .pad .dest{font:500 11px ui-monospace,Menlo,monospace;color:var(--dim);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -174,7 +175,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
 @media (max-width:820px){body.rec #viewRec{grid-template-columns:1fr;height:auto}}
 .rs{display:grid;gap:12px;overflow:auto;align-content:start}
 .rs .lbl2{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
-.rs select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:15px;padding:9px 10px}
+.rs select,.rs #recText{box-sizing:border-box;width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:15px;padding:9px 10px}
 .swp{display:flex;flex-wrap:wrap;gap:6px}
 .swp .chip{border-left:4px solid var(--tc,var(--line))}
 .swp .chip.on{background:var(--accent);color:#121214;border-color:var(--accent);border-left-color:var(--tc,var(--accent))}
@@ -241,13 +242,13 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
     <span id="session" class="mono">conectando…</span>
   </button>
   <button class="hbtn" id="reconBtn">↻ Reconectar</button>
-  <div class="views"><button id="vPads" class="sel">Botonera</button><button id="vList">Lista<span class="badge" id="newCount"></span></button><button id="vRec">Grabar</button></div>
+  <div class="views"><button id="vPads" class="sel">Botonera</button><button id="vFolders">Carpetas</button><button id="vList">Lista<span class="badge" id="newCount"></span></button><button id="vRec">Grabar</button></div>
   <button class="hbtn" id="undo">↶ Deshacer</button>
 </header>
 
 <main id="viewPads">
   <section>
-    <h2><span>Spotting · marcá la región y tocá</span><span style="display:flex;gap:8px"><button class="hbtn" id="markBtn" title="Marcador en el inicio de la selección">⚑ Escena</button><button class="hbtn" id="editBtn">✎ Editar</button><button class="hbtn" id="reload">↻ Tracks</button></span></h2>
+    <h2><span>Spotting · marcá la región y tocá</span><span style="display:flex;gap:8px"><button class="hbtn" id="refBtn" title="El próximo clip group sale con «REF» al final (no pasa al track de grabación)">REF</button><button class="hbtn" id="markBtn" title="Marcador en el inicio de la selección">⚑ Escena</button><button class="hbtn" id="editBtn">✎ Editar</button><button class="hbtn" id="reload">↻ Tracks</button></span></h2>
     <div class="cats" id="cats"></div>
     <div class="namebar" id="namebar"><input id="clipName" placeholder="Nombre del clip (vacío = nombre del track)" autocomplete="off" autocapitalize="words"><button class="hbtn" id="clearName">×</button></div>
     <div class="recents" id="recents"></div>
@@ -287,6 +288,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
   <section class="rs">
     <div><div class="lbl2">Qué barrer</div><div class="swp" id="recSweep"></div></div>
     <div><div class="lbl2">Solo pasos sobre la superficie</div><select id="recSurf"></select></div>
+    <div><div class="lbl2">Solo los que dicen (p. ej. «metal»; vacío = todos)</div><input id="recText" placeholder="palabra del nombre del clip" autocomplete="off" autocapitalize="none" style="width:100%"></div>
     <div><div class="lbl2">Track de grabación (se renombra solo)</div><select id="recTrack"></select></div>
     <label class="tog"><input type="checkbox" id="recAuto"> Renombrar el track al ir a cada clip</label>
     <label class="tog"><input type="checkbox" id="recFollow"> Seguir Pro Tools (clic en un clip de spotting → aparece acá)</label>
@@ -525,12 +527,23 @@ const ls = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+const foldersMode = () => document.body.classList.contains('folders');
+const tabStore = () => foldersMode() ? 'spotpad.tab.folders' : 'spotpad.tab';
 function allTabs() {
-  const vis = layout.tabs.filter(t => !isHidF(t.name)).map(t => ({...t,
-    groups: t.groups.map(g => ({...g, tracks: g.tracks.filter(x => !isHidT(x.name))})).filter(g => g.tracks.length)}));
+  const visTracks = g => ({...g, tracks: g.tracks.filter(x => !isHidT(x.name))});
+  if (!foldersMode()) {
+    // Botonera: solo categorías (superficies, pasos, props por track) + las preseteadas + el proyecto
+    const kinds = (layout.kinds || []).map(k => ({...k, groups: k.groups.map(visTracks).filter(g => g.tracks.length)}))
+                                      .filter(k => k.groups.length);
+    return [...kinds.map(k => ({key: 'k:' + k.kind, label: k.label, kind: 'folder', kindTab: true, tab: {name: k.label, groups: k.groups}})),
+            ...presets.map(p => ({key: 'p:' + p.id, label: p.label, kind: 'preset', cat: p})),
+            ...(project && project.session ? [{key: 'j:proyecto', kind: 'project',
+                label: '★ ' + project.project + ' (' + project.tracks.reduce((n, g) => n + g.names.length, 0) + ')'}] : [])];
+  }
+  // Carpetas: la sesión tal cual (una pestaña por carpeta), con Ocultos e Inactivos
+  const vis = layout.tabs.filter(t => !isHidF(t.name)).map(t => ({...t, groups: t.groups.map(visTracks).filter(g => g.tracks.length)}));
   const h = hiddenTab(), off = layout.inactive || [];
   return [...vis.map(t => ({key: 'f:' + t.name, label: t.name, kind: 'folder', tab: t})),
-          ...presets.map(p => ({key: 'p:' + p.id, label: p.label, kind: 'preset', cat: p})),
           ...(h ? [{key: 'h:ocultos', label: `Ocultos (${h.groups.reduce((n, g) => n + g.tracks.length, 0)})`, kind: 'folder', tab: h, hiddenTab: true}] : []),
           ...(off.length ? [{key: 'i:inactivos', label: `Inactivos (${off.reduce((n, g) => n + g.tracks.length, 0)})`, kind: 'folder',
                             tab: {name: 'Inactivos', groups: off}, hiddenTab: true, inactiveTab: true}] : [])];
@@ -541,11 +554,19 @@ function tcolor(c) {
   if (/^[0-9a-f]{8}$/i.test(h)) h = h.slice(2);          // ARGB → RGB
   return /^[0-9a-f]{6}$/i.test(h) ? '#' + h : '';
 }
+// REF: el próximo clip group sale con «REF» al final (un solo uso; tocalo de nuevo para cancelar)
+let refOn = false;
+function setRef(on) { refOn = on; $('#refBtn').classList.toggle('on', on); }
+function useRef() { const r = refOn; if (r) setRef(false); return r; }
+$('#refBtn').onclick = () => { setRef(!refOn); toast(refOn ? 'REF: el próximo clip sale con «REF»' : 'REF cancelado'); };
+let project = null;     // nombres escritos a mano en este proyecto (por track)
+async function loadProject() { project = await api('/api/project').catch(() => project); }
 async function loadLayout(quiet) {
+  await loadProject();
   try { layout = await api('/api/layout'); layoutErr = ''; }
   catch (e) { layout = {tabs: []}; layoutErr = e.message; if (!quiet) toast(e.message, true); }
   const tabs = allTabs();
-  if (!tabs.find(t => t.key === tabKey)) tabKey = ls.get('spotpad.tab', null);
+  if (!tabs.find(t => t.key === tabKey)) tabKey = ls.get(tabStore(), null);
   if (!tabs.find(t => t.key === tabKey)) tabKey = tabs[0] && tabs[0].key;
   renderCats(); renderGrid();
 }
@@ -560,7 +581,7 @@ function renderCats() {
     const b = document.createElement('button');
     b.className = 'cat ' + t.kind + (t.hiddenTab ? ' hiddentab' : '') + (t.key === tabKey ? ' sel' : ''); b.textContent = t.label;
     if (t.cat) b.style.setProperty('--cc', t.cat.color);
-    b.onclick = () => { tabKey = t.key; ls.set('spotpad.tab', tabKey); $('#clipName').value = ''; renderCats(); renderGrid(); loadLayout(true); };
+    b.onclick = () => { tabKey = t.key; ls.set(tabStore(), tabKey); $('#clipName').value = ''; renderCats(); renderGrid(); loadLayout(true); };
     c.append(b);
   });
   if (editing) {
@@ -573,11 +594,14 @@ function renderGrid() {
   $('#namebar').style.display = $('#recents').style.display = (t && t.kind === 'folder' && !t.inactiveTab) ? '' : 'none';
   if (!t) { w.innerHTML = '<div class="empty">No encontré carpetas con tracks en la sesión.</div>'; return; }
   if (t.kind === 'preset') return renderPresetGrid(w, t.cat);
+  if (t.kind === 'project') return renderProjectGrid(w);
   // Barra de edición: ocultar la carpeta entera (o, en Ocultos, explicar cómo volver)
   const bar = document.createElement('div'); bar.className = 'fbar';
   if (t.inactiveTab) {
     bar.classList.add('always');
     bar.innerHTML = '<span>Tracks inactivos en Pro Tools: SpotPad no los usa (botonera, lista ni grabación). Tocá uno dos veces para reactivarlo.</span>';
+  } else if (t.kindTab) {
+    bar.innerHTML = '<span>Tocá un track para ocultarlo (lo ves en Carpetas › Ocultos).</span>';
   } else if (t.hiddenTab) {
     bar.innerHTML = '<span>Tocá un track (o «Mostrar carpeta») para que vuelva a su pestaña.</span>';
   } else {
@@ -632,8 +656,8 @@ function renderGrid() {
         if (b.classList.contains('busy')) return;
         b.classList.add('busy');
         const name = $('#clipName').value.trim();
-        try { const r = await api('/api/group-on/' + encodeURIComponent(tr.id), {method: 'POST', body: JSON.stringify({name})});
-              flash(b, true); toast(r.msg); if (name) { addRecent(name); $('#clipName').value = ''; } }
+        try { const r = await api('/api/group-on/' + encodeURIComponent(tr.id), {method: 'POST', body: JSON.stringify({name, ref: useRef()})});
+              flash(b, true); toast(r.msg); if (name) { addRecent(name); $('#clipName').value = ''; loadProject().then(renderCats); } }
         catch (e) { flash(b, false); toast(e.message, true); }
         b.classList.remove('busy');
       };
@@ -664,6 +688,53 @@ const iTrack = (it, cat) => ((typeof it === 'object' && it.track) || (cat && cat
 const sessionTracks = () => layout.tabs.flatMap(t => t.groups.flatMap(g => g.tracks.map(tr => ({tab: t.name, name: tr.name}))));
 const hasTrack = n => sessionTracks().some(t => t.name.trim().toLowerCase() === n.trim().toLowerCase());
 
+// Pestaña del proyecto: lo que se escribió a mano en «Nombre del clip», agrupado por track
+function renderProjectGrid(w) {
+  const bar = document.createElement('div'); bar.className = 'fbar always';
+  bar.innerHTML = '<span></span><button class="hbtn" data-a="ren">Cambiar proyecto</button>';
+  bar.querySelector('span').textContent = `Proyecto «${project.project}» (sesión ${project.session}). ` +
+    (editing ? 'Tocá un nombre para sacarlo.' : 'Lo que escribís a mano en «Nombre del clip» queda acá, en el track donde lo usaste.');
+  bar.querySelector('[data-a=ren]').onclick = async () => {
+    const r = await ask({title: 'Proyecto de esta sesión', label: 'Nombre del proyecto', value: project.project,
+      hint: 'Las sesiones con el mismo proyecto comparten estos nombres (p. ej. todos los capítulos de una serie). ' +
+            (project.known.length ? 'Proyectos: ' + project.known.join(', ') : '')});
+    if (!r) return;
+    try { project = await api('/api/project', {method: 'PUT', body: JSON.stringify({project: r.name})}); tabKey = 'j:proyecto';
+          renderCats(); renderGrid(); toast('Proyecto: ' + project.project); }
+    catch (e) { toast(e.message, true); }
+  };
+  w.append(bar);
+  if (!project.tracks.length) {
+    const e = document.createElement('div'); e.className = 'empty';
+    e.textContent = 'Todavía no hay nombres. Escribí uno en «Nombre del clip» y tocá un track en su carpeta: va a aparecer acá.';
+    w.append(e); return;
+  }
+  const col = n => { for (const tab of layout.tabs) for (const g of tab.groups) for (const x of g.tracks) if (x.name === n) return tcolor(x.color); return ''; };
+  project.tracks.forEach(g => {
+    const h = document.createElement('div'); h.className = 'ghead'; h.textContent = g.track + (layout.tabs.length && !hasTrack(g.track) ? ' (no está en esta sesión)' : '');
+    w.append(h);
+    const grid = document.createElement('div'); grid.className = 'tgrid'; w.append(grid);
+    g.names.forEach(name => {
+      const b = document.createElement('button'); b.className = 'tpad';
+      const c = col(g.track); if (c) b.style.setProperty('--tc', c);
+      b.innerHTML = '<span class="k"></span><span class="lab"></span><span class="hide"></span>';
+      b.querySelector('.k').textContent = g.track; b.querySelector('.lab').textContent = name;
+      b.querySelector('.hide').textContent = editing ? 'sacar' : '';
+      b.onclick = async () => {
+        if (editing) {
+          project = await api('/api/project/remove', {method: 'POST', body: JSON.stringify({track: g.track, name})}).catch(e => (toast(e.message, true), project));
+          renderCats(); return renderGrid();
+        }
+        if (b.classList.contains('busy')) return;
+        b.classList.add('busy');
+        try { const r = await api('/api/group', {method: 'POST', body: JSON.stringify({name, track: g.track, ref: useRef()})}); flash(b, true); toast(r.msg); }
+        catch (e) { flash(b, false); toast(e.message, true); }
+        b.classList.remove('busy');
+      };
+      grid.append(b);
+    });
+  });
+}
 function renderPresetGrid(w, cat) {
   const g = document.createElement('div'); g.className = 'grid'; w.append(g);
   cat.items.forEach((it, i) => {
@@ -681,7 +752,7 @@ function renderPresetGrid(w, cat) {
       if (editing) return openItem(cat, i);
       if (b.classList.contains('busy')) return;
       b.classList.add('busy');
-      try { const r = await api('/api/group', {method: 'POST', body: JSON.stringify({name, track})});
+      try { const r = await api('/api/group', {method: 'POST', body: JSON.stringify({name, track, ref: useRef()})});
             flash(b, true); toast(r.msg); }
       catch (e) { flash(b, false); toast(e.message, true); }
       b.classList.remove('busy');
@@ -771,7 +842,7 @@ $('#ecSave').onclick = () => {
     const base = label.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cat';
     let id = base, k = 2; while (presets.some(p => p.id === id)) id = base + '-' + k++;
     cat = {id, label, color: $('#ecColor').value, items: []}; presets.push(cat);
-    tabKey = 'p:' + id; ls.set('spotpad.tab', tabKey);
+    tabKey = 'p:' + id; ls.set(tabStore(), tabKey);
   }
   cat.label = label; cat.color = $('#ecColor').value;
   const t = $('#ecTrack').value.trim(); if (t) cat.track = t; else delete cat.track;
@@ -878,6 +949,10 @@ function setView(v) {
   if (v === true) v = 'list'; if (v === false) v = 'pads';
   document.body.classList.toggle('list', v === 'list');
   document.body.classList.toggle('rec', v === 'rec');
+  const wasFolders = foldersMode();
+  document.body.classList.toggle('folders', v === 'folders');
+  $('#vFolders').classList.toggle('sel', v === 'folders');
+  if ((v === 'pads' || v === 'folders') && wasFolders !== (v === 'folders')) { tabKey = null; loadLayout(true); }
   $('#vPads').classList.toggle('sel', v === 'pads'); $('#vList').classList.toggle('sel', v === 'list');
   $('#vRec').classList.toggle('sel', v === 'rec');
   ls.set('spotpad.view', v);
@@ -886,6 +961,7 @@ function setView(v) {
 }
 $('#vPads').onclick = () => setView('pads');
 $('#vList').onclick = () => setView('list');
+$('#vFolders').onclick = () => setView('folders');
 $('#vRec').onclick = () => setView('rec');
 
 async function refreshList(manual) {
@@ -1022,6 +1098,7 @@ function recRenderSetup() {
   const ss = $('#recSurf'); ss.innerHTML = '<option value="">Todas</option>' +
     (rec.surface_tracks || []).map(n => `<option>${esc2(n)}</option>`).join('');
   ss.value = recSt.surface_filter || '';
+  if (document.activeElement !== $('#recText')) $('#recText').value = recSt.text_filter || '';
   // Track de grabación (cualquier track de la sesión)
   const rt = $('#recTrack');
   rt.innerHTML = '<option value="">(ninguno: solo posicionar)</option>' +
@@ -1032,6 +1109,7 @@ async function recPutState(patch) {
   try { const r = await api('/api/rec/state', {method: 'PUT', body: JSON.stringify(patch)}); recApply(r); }
   catch (e) { toast(e.message, true); }
 }
+$('#recText').onchange = e => { recSt.text_filter = e.target.value.trim(); recPutState({text_filter: recSt.text_filter}).then(recRenderSetup); };
 $('#recSurf').onchange = e => { recSt.surface_filter = e.target.value; recPutState({surface_filter: recSt.surface_filter}).then(recRenderSetup); };
 $('#recTrack').onchange = e => { recSt.rec_track = e.target.value; recPutState({rec_track: recSt.rec_track}); };
 $('#recAuto').onchange = e => { recSt.auto_rename = e.target.checked; recPutState({auto_rename: recSt.auto_rename}); };
@@ -1052,7 +1130,7 @@ function recRender() {
     const src = it.kind === 'footsteps' && it.shoe ? ({color: 'calzado por color del track', clip: 'calzado por el nombre del clip', personaje: 'calzado fijado para el personaje', elegido: 'calzado elegido', track: ''}[it.shoe_src] || '') : '';
     card.innerHTML = `<div class="card">
       <div class="tcs">${esc2(it.tc_in || it.start)}<small>→ ${esc2(it.tc_out || it.end)}</small></div>
-      <div class="src">${esc2(it.track)} · clip «${esc2(it.clip)}»${it.muted ? ' · muteado' : ''}${it.done ? ' · grabado' : ''}</div>
+      <div class="src">${esc2(it.track)} · clip «${esc2(it.clip)}»${it.ref ? ' · <b>REF</b>' : ''}${it.muted ? ' · muteado' : ''}${it.done ? ' · grabado' : ''}</div>
       <button class="cren" id="recRenClip">✎ renombrar el clip de spotting</button>
       <div class="nm ${it.name_src}" id="recName" title="Tocá para editar">${esc2(it.name)}</div>
       <div class="hint">${src ? esc2(src) + ' · ' : ''}tocá el nombre para editarlo</div>
@@ -1161,7 +1239,7 @@ $('#rrClose').onclick = () => { $('#recRules').close(); recRender(); };
   poll(); setInterval(poll, 4000);
   presets = (await api('/api/presets')).categories || [];
   renderRecents(); await loadHidden(); await loadLayout(true);
-  if (ls.get('spotpad.view', 'pads') === 'rec') setView('rec');
+  if (['rec', 'folders'].includes(ls.get('spotpad.view', 'pads'))) setView(ls.get('spotpad.view'));
   const pr = await api('/api/prefix'); prefix = pr.prefix; prefixOpts = pr.options; renderSeg();
   await Promise.all([loadTracks(), loadTargets()]); renderTargets();
 })();

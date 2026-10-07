@@ -17,14 +17,22 @@ assert r["item"]["name"] == "Fts Henry Sneakers Concrete Clean"
 r = rec.done_next()                                 # marca el actual y pasa al siguiente
 assert r["item"]["name"] == "Fts Extra Left Sneakers Concrete Clean"
 assert rec.step(-1)["item"]["start"] == 36 * 48000  # el de 50 s quedó grabado: lo saltea
-try:
-    rec.from_selection(); raise AssertionError("debería pedir la superficie")
-except SpotError as e:
-    assert "superficie" in str(e)
-rec.choice({"key": "Henry|1728000", "surface": "Wood"})
+r = rec.from_selection()                              # falta la superficie: devuelve las opciones
+assert r["needs"] == ["surface"] and r["options"]["surface"] == ["Concrete Clean", "Wood"], r
+assert "superficie" in r["msg"]
+r = rec.choose(r["item"]["key"], {"surface": "Wood"})  # lo que elige el diálogo del atajo
+assert pt._tracks[2]["name"] == "Fts Henry Male Shoes Wood", pt._tracks
 r = rec.from_selection()
 assert r["item"]["name"] == "Fts Henry Male Shoes Wood" and "Fts Henry Male Shoes Wood" in r["msg"]
 assert pt._tracks[2]["name"] == "Fts Henry Male Shoes Wood"     # el track de grabación quedó renombrado
+# Atajo: el diálogo elige y renombra (Hotkeys.resolve_needs)
+import hotkeys
+hk = hotkeys.Hotkeys(rec, __import__("pathlib").Path(os.environ["SPOTPAD_DATA"]) / "hk.json")
+rec.choice({"key": "Henry|1728000", "surface": ""})
+hotkeys.ask_choice = lambda prompt, opts, timeout=120: "Concrete Clean"
+r = hk.resolve_needs(rec.from_selection())
+assert r["item"]["name"] == "Fts Henry Male Shoes Concrete Clean" and pt._tracks[2]["name"] == r["item"]["name"], r
+rec.choice({"key": "Henry|1728000", "surface": "Wood"})
 print("rec OK")
 
 # --- Seguir Pro Tools: clic en un clip → clip actual + track de grabación renombrado ---
@@ -70,3 +78,12 @@ for base in (0, 1):
     assert e2.tcolor == "#ff000003", (base, e2.tcolor)
     assert p2._color_offset == base
 print("color OK")
+
+# --- Filtro por palabra: primero una parte de la categoría (p. ej. «metal»), después el resto ---
+rec = RecController(MockProTools()); rec.refresh()
+rec.set_state({"sweep": ["Chairs", "Hands Surfaces"], "text_filter": "drag", "surface_filter": "", "cur": ""})
+got = [i["name"] for i in rec.build()["items"]]
+assert got == ["Prps Chair Drag"], got
+rec.set_state({"text_filter": ""})
+assert len(rec.build()["items"]) == 3
+print("filtro texto OK")

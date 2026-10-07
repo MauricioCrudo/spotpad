@@ -31,14 +31,43 @@ DEFAULTS = {
     "notify_success": False,
     "bindings": {
         "from_selection": f"{MOD}+r",
-        "next": f"{MOD}+<right>",
-        "prev": f"{MOD}+<left>",
+        "next": f"{MOD}+n",
+        "prev": f"{MOD}+b",
         "done_next": f"{MOD}+g",
     },
 }
 
+# Teclas para Siguiente / Anterior (las flechas con ⌃⌥⌘ chocan con otras funciones del sistema/Pro Tools)
+SCHEMES = {
+    "letras": ("n", "b", "N (siguiente) / B (atrás)"),
+    "signos": (".", ",", ". (siguiente) / , (atrás)"),
+    "fkeys": ("<f14>", "<f13>", "F14 / F13 (teclado extendido)"),
+    "flechas": ("<right>", "<left>", "→ / ← (flechas)"),
+}
+OLD_ARROWS = (f"{MOD}+<right>", f"{MOD}+<left>")
+
+
+def scheme_of(cfg) -> str:
+    b = cfg.get("bindings", {})
+    for k, (n, p, _l) in SCHEMES.items():
+        if b.get("next") == f"{MOD}+{n}" and b.get("prev") == f"{MOD}+{p}":
+            return k
+    return ""
+
+
+def set_scheme(path, scheme: str):
+    """Cambia las teclas de Siguiente/Anterior en hotkeys.json (deja el resto como está)."""
+    n, p, _l = SCHEMES[scheme]
+    try:
+        user = json.loads(path.read_text("utf-8"))
+    except Exception:                            # noqa: BLE001
+        user = json.loads(json.dumps(DEFAULTS))
+    user.setdefault("bindings", {}).update({"next": f"{MOD}+{n}", "prev": f"{MOD}+{p}"})
+    path.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
+
+
 _SYM_MAC = {"<ctrl>": "⌃", "<alt>": "⌥", "<cmd>": "⌘", "<shift>": "⇧", "<right>": "→", "<left>": "←",
-            "<up>": "↑", "<down>": "↓", "<space>": "Espacio", "<enter>": "↩"}
+            "<up>": "↑", "<down>": "↓", "<space>": "Espacio", "<enter>": "↩", "<f13>": "F13", "<f14>": "F14"}
 _SYM_WIN = {"<ctrl>": "Ctrl+", "<alt>": "Alt+", "<cmd>": "Win+", "<shift>": "Shift+", "<right>": "→",
             "<left>": "←", "<up>": "↑", "<down>": "↓", "<space>": "Espacio", "<enter>": "Enter"}
 
@@ -63,6 +92,14 @@ def load(path) -> dict:
     except Exception as e:                       # JSON roto: usar los de fábrica y avisar
         log.warning("hotkeys.json inválido (%s): uso los de fábrica", e)
         return json.loads(json.dumps(DEFAULTS))
+    ub = user.get("bindings", {})
+    if (ub.get("next"), ub.get("prev")) == OLD_ARROWS:   # los de fábrica viejos: pasar a letras
+        ub["next"], ub["prev"] = DEFAULTS["bindings"]["next"], DEFAULTS["bindings"]["prev"]
+        try:
+            path.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
+            log.info("Atajos: Siguiente/Anterior pasan de flechas a %s / %s", label(ub["next"]), label(ub["prev"]))
+        except Exception:                        # noqa: BLE001
+            pass
     cfg = json.loads(json.dumps(DEFAULTS))
     cfg.update({k: v for k, v in user.items() if k != "bindings"})
     cfg["bindings"].update({k: v for k, v in user.get("bindings", {}).items() if k in ACTIONS and v})
@@ -79,6 +116,39 @@ def notify(title: str, msg: str, icon=None):
             icon.notify(msg, title)
     except Exception:                            # noqa: BLE001
         pass
+
+
+def ask_choice(prompt: str, options, timeout=120):
+    """Mac: lista para elegir encima de Pro Tools y vuelve a Pro Tools. Devuelve lo elegido o None.
+    (La primera vez macOS pide permiso para que SpotPad use «System Events».)"""
+    if sys.platform != "darwin" or not options:
+        return None
+    esc = lambda t: str(t).replace("\\", "\\\\").replace('"', '\\"')
+    items = ", ".join(f'"{esc(o)}"' for o in options)
+    script = f'''
+tell application "System Events"
+    set prev to name of first application process whose frontmost is true
+    activate
+    set r to choose from list {{{items}}} with title "SpotPad" with prompt "{esc(prompt)}" default items {{"{esc(options[0])}"}}
+end tell
+try
+    tell application prev to activate
+end try
+if r is false then return ""
+return item 1 of r
+'''
+    try:
+        out = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=timeout)
+        pick = out.stdout.strip()
+        if out.returncode != 0:
+            log.info("Elegir: osascript %s", out.stderr.strip()[:200])
+        return pick if pick in options else None
+    except Exception as e:                       # noqa: BLE001
+        log.info("Elegir: %s", e)
+        return None
+
+
+NEED_LABEL = {"surface": "Superficie", "shoe": "Calzado"}
 
 
 def mac_trusted(prompt: bool = False) -> bool:
@@ -124,6 +194,7 @@ class Hotkeys:
                 return                          # ya hay una acción en curso: ignorar repetición
             try:
                 r = self.actions()[name]()
+                r = self.resolve_needs(r)
                 log.info("Atajo %s: %s", name, r.get("msg", "ok"))
                 if self.cfg.get("notify_success"):
                     notify("SpotPad", r.get("msg", "Listo"), self.icon_ref())
@@ -133,6 +204,21 @@ class Hotkeys:
             finally:
                 self.busy.release()
         threading.Thread(target=work, daemon=True, name=f"hotkey-{name}").start()
+
+    def resolve_needs(self, r):
+        """Si al clip le falta la superficie o el calzado, preguntarlo ahí mismo (Mac) y renombrar."""
+        if not r or not r.get("needs") or not r.get("options") or not r.get("item"):
+            return r
+        it, picks = r["item"], {}
+        for need in r["needs"]:
+            opts = r["options"].get(need) or []
+            pick = ask_choice(f"{NEED_LABEL.get(need, need)} para «{it['name']}»", opts)
+            if pick is None:
+                if sys.platform != "darwin":
+                    notify("SpotPad", r.get("msg", "Falta elegir") + " (en la pestaña Grabar)", self.icon_ref())
+                return r
+            picks[need] = pick
+        return self.rec.choose(it["key"], picks)
 
     def start(self):
         self.stop()

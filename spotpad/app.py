@@ -71,7 +71,8 @@ def selftest(port):
     from ptsl import PTSL_pb2        # noqa: F401
     if sys.platform in ("darwin", "win32"):     # que la librería de teclado haya quedado empaquetada
         from pynput import keyboard
-        for b in hk.DEFAULTS["bindings"].values():
+        for b in list(hk.DEFAULTS["bindings"].values()) + [f"{hk.MOD}+{n}" for n, p, _l in hk.SCHEMES.values()] \
+                + [f"{hk.MOD}+{p}" for n, p, _l in hk.SCHEMES.values()]:
             keyboard.HotKey.parse(b)
     pt = MockProTools()
     stop = start_server(pt, port, RecController(pt))
@@ -149,6 +150,10 @@ def main():
         hk.notify("SpotPad", "Atajos activos" if ok else f"Atajos: {keys.error}", icon)
         icon.update_menu()
 
+    def set_scheme(icon, key):
+        hk.set_scheme(HOTKEYS_FILE, key)
+        keys_restart(icon, None)
+
     def keys_items():
         rows = [Item(f"{k}   {desc}", None, enabled=False) for desc, k in keys.summary()]
         state = "activos" if keys.listener and not keys.error else (keys.error or "inactivos")
@@ -156,6 +161,10 @@ def main():
             Item(f"Estado: {state}", None, enabled=False),
             *rows,
             Menu.SEPARATOR,
+            Item("Teclas de Siguiente / Anterior", Menu(*[
+                Item(lab, (lambda k: lambda icon, _: set_scheme(icon, k))(key),
+                     checked=(lambda k: lambda _: hk.scheme_of(keys.cfg) == k)(key), radio=True)
+                for key, (_n, _p, lab) in hk.SCHEMES.items()])),
             Item("Reactivar atajos", keys_restart),
             Item("Cambiar teclas (hotkeys.json)", lambda *_: open_path(HOTKEYS_FILE)),
             *([Item("Permiso de Accesibilidad…", lambda *_: hk.open_accessibility_settings())]

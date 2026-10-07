@@ -45,6 +45,7 @@ jobs:
           python test_rec.py
           python test_active.py
           python test_ai.py
+          python test_project.py
       - name: Compilar
         run: pyinstaller --noconfirm spotpad.spec
       - name: Prueba de arranque (Mac)

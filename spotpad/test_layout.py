@@ -28,3 +28,12 @@ mk = lambda v: N(track_attributes=N(is_inactive=v))
 assert [is_inactive(mk(v)) for v in (0, 1, 2, 3)] == [False, False, True, True]
 assert is_inactive(N()) is False
 print("layout OK")
+
+# Carpeta de tipo dentro de otra (SPOTTING › FTS): el tipo sale de la más cercana que coincide
+from bridge import top_folders, load_rules
+inf = [dict(F(1, "SPOTTING"), inactive=False), dict(F(2, "FTS", "f1"), inactive=False),
+       dict(T(3, "Henry", "f2"), inactive=False), dict(T(4, "Otro", "f1"), inactive=False)]
+tf = top_folders(inf, load_rules())
+assert tf["Henry"] == "FTS" and tf["Otro"] == "SPOTTING", tf
+assert top_folders(inf)["Henry"] == "SPOTTING"
+print("carpetas anidadas OK")

@@ -46,6 +46,12 @@ python3 bridge.py --debug  # loguea cada comando PTSL (útil si algo falla)
 Al arrancar muestra la dirección (p. ej. `http://192.168.0.20:8765`). Abrila en Safari del iPad → Compartir → **Agregar a inicio** para usarla a pantalla completa.
 La primera vez macOS va a preguntar si permite conexiones entrantes a Python: aceptá.
 
+## Botonera, Carpetas y Proyecto
+- **Botonera:** solo categorías — **Superficies**, **Pasos** y **Props** (los tracks de esas carpetas, aunque estén dentro de otra), las categorías preseteadas (*Manos*…) y **★ Proyecto**.
+- **Carpetas:** la sesión tal cual, una pestaña por carpeta, con **Ocultos** e **Inactivos** (para ver que todo esté, o marcar algo rápido).
+- **★ Proyecto:** lo que escribís a mano en «Nombre del clip» queda guardado en el track donde lo usaste, para repetirlo con un toque. Es por proyecto: las sesiones que comparten nombre (sin capítulo, rollo ni versión: *Serie_EP03_Foley* → *Serie*) comparten la lista. «Cambiar proyecto» lo ajusta; en ✎ Editar, tocar un nombre lo saca. Se guarda en `proyectos.json`.
+- **REF:** tocás **REF** y el próximo clip group sale con «REF» al final (*Chair sit REF*). Es de un solo uso. El REF marca el clip de spotting, pero nunca pasa al nombre del track de grabación (en Grabar se ve como «· REF»).
+
 ## Botonera armada desde la sesión
 Las pestañas salen de las **carpetas** de la sesión: una por carpeta de primer nivel (Surfaces, Footsteps, Props…) y, adentro, un botón por track, en el mismo orden y con el color del track. Las subcarpetas aparecen como grupos dentro de la pestaña. Los tracks que no están en ninguna carpeta (video, diálogos, pre, grabación) no aparecen.
 
@@ -127,17 +133,20 @@ Funcionan con Pro Tools en primer plano:
 | Mac | Windows | Acción |
 |---|---|---|
 | **⌃⌥⌘R** | Ctrl+Alt+Shift+R | **Renombrar el track de grabación con el clip seleccionado**: clic en un clip de spotting y atajo |
-| **⌃⌥⌘→** | Ctrl+Alt+Shift+→ | Siguiente pendiente (posiciona y renombra) |
-| **⌃⌥⌘←** | Ctrl+Alt+Shift+← | Anterior pendiente |
+| **⌃⌥⌘N** | Ctrl+Alt+Shift+N | Siguiente pendiente (posiciona y renombra) |
+| **⌃⌥⌘B** | Ctrl+Alt+Shift+B | Anterior pendiente |
 | **⌃⌥⌘G** | Ctrl+Alt+Shift+G | Marcar grabado y pasar al siguiente |
 
 - Usan la misma configuración que la pestaña Grabar (track de grabación, qué barrer, reglas). El iPad sigue solo lo que hacés con las teclas.
-- Si falta elegir superficie o calzado, aparece una notificación y lo resolvés en el iPad.
+- Si falta elegir superficie o calzado, en Mac aparece una lista encima de Pro Tools para elegirlo ahí mismo (la primera vez macOS pide permiso para que SpotPad use «System Events»); después renombra y vuelve a Pro Tools. En Windows se resuelve en el iPad.
+- **Siguiente / Anterior** eran ⌃⌥⌘ + flechas, que chocan con otras funciones: ahora son **N / B**. Otras opciones en el ícono → *Atajos de teclado → Teclas de Siguiente / Anterior* (. y , · F14 y F13 · flechas).
 - **Mac:** la primera vez macOS pide permiso de **Accesibilidad** para SpotPad (Ajustes del Sistema → Privacidad y seguridad → Accesibilidad). Como la app no está firmada, después de actualizarla puede pedirlo de nuevo: sacá SpotPad de la lista y volvé a agregarlo.
 - Para cambiar las teclas: ícono → *Atajos de teclado → Cambiar teclas (hotkeys.json)*, y después *Reactivar atajos*.
 - Las mismas acciones para Stream Deck / Keyboard Maestro: `POST /api/rec/from-selection`, `/api/rec/next`, `/api/rec/prev`, `/api/rec/done-next`.
 
-Las carpetas se reconocen por nombre: superficies (*SUPERFICIES/SURFACES*), pasos (*FTS/FOOTSTEPS*), props (*PRPS/PROPS*).
+Las carpetas se reconocen por nombre: superficies (*SUPERFICIES/SURFACES*), pasos (*FTS/FOOTSTEPS*), props (*PRPS/PROPS*), aunque estén dentro de otra carpeta (p. ej. *SPOTTING › FTS*).
+
+**Filtro por palabra:** «Solo los que dicen» deja en la cola solo los clips cuyo nombre tiene esa palabra (p. ej. *metal* para grabar primero los hand surfaces de metal y después el resto). Pro Tools no deja cambiar el color de un clip desde el SDK, así que la separación va por el nombre.
 
 ## Atajos de teclado / Stream Deck
 Cualquier app que dispare un comando (Keyboard Maestro, BetterTouchTool, Stream Deck) puede llamar al bridge:

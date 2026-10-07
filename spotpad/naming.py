@@ -74,7 +74,12 @@ def strip_suffix(s: str) -> str:
     """Saca lo que Pro Tools agrega después de un punto: «Hands body.grp.01» → «Hands body»
     (en cada palabra, por si el clip quedó en el medio del nombre)."""
     words = [w.split(".")[0] for w in re.sub(r"\s+", " ", str(s or "")).strip().split(" ")]
-    return " ".join(w for w in words if w)
+    return " ".join(w for w in words if w and w.lower() != "ref")     # «REF» marca el clip, no va al nombre
+
+
+def has_ref(clip: str) -> bool:
+    """¿El clip de spotting está marcado como REF (al principio o al final)?"""
+    return any(w.split(".")[0].lower() == "ref" for w in str(clip or "").split())
 
 
 def tidy(name: str) -> str:
@@ -161,8 +166,9 @@ def build_queue(tracks: List[dict], edl: Dict[str, list], sweep: List[str], rule
         cls = classify_fts(tname, rules) if kind == "footsteps" else None
         for ev in edl.get(tname, []):
             key = f"{tname}|{ev.start}"
-            raw_clip = strip_suffix(ev.clip)
+            raw_clip = strip_suffix(ev.clip)          # sin «.grp.01» ni «Ref»
             it = {"key": key, "track": tname, "clip": ev.clip, "start": ev.start, "end": ev.end,
+                  "ref": has_ref(ev.clip),
                   "muted": bool(getattr(ev, "muted", False)), "done": key in done, "kind": kind or "other",
                   "needs": []}
             if tc:
