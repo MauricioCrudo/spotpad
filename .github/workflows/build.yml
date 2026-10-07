@@ -169,3 +169,10 @@ jobs:
           gh release create ultima out/*.zip --prerelease --target "${{ github.sha }}" \
             --title "Última versión" \
             --notes "Compilado automáticamente desde ${GITHUB_SHA::7}. Bajá el zip de tu computadora."
+          # gh sube los zips a un borrador y después lo publica; si ese último paso falla, la
+          # versión queda invisible. Publicarla de nuevo y verificar.
+          for i in 1 2 3; do
+            gh release edit ultima --draft=false --prerelease && break
+            sleep 5
+          done
+          test "$(gh release view ultima --json isDraft -q .isDraft)" = "false"
