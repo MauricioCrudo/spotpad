@@ -49,6 +49,12 @@ python3 bridge.py --debug  # loguea cada comando PTSL (útil si algo falla)
 Al arrancar muestra la dirección (p. ej. `http://192.168.0.20:8765`). Abrila en Safari del iPad → Compartir → **Agregar a inicio** para usarla a pantalla completa.
 La primera vez macOS va a preguntar si permite conexiones entrantes a Python: aceptá.
 
+## Herramientas de edición (prueba)
+Apagadas por defecto: se prenden en **Ajustes → Herramientas de edición**. Viven aparte del resto (sus propias rutas y atajos), así que apagadas no cambian nada.
+- **Consolidar (⌃⌥⌘K o botón en Grabar):** consolida la selección en el mismo track y le pone al clip nuevo, y a su archivo, el nombre del primer clip de la selección (sin «_03», «-01», «.L»). Si hay varios tracks seleccionados, lo hace en cada uno.
+- **Regrabar (⌃⌥⌘J o botón en Grabar):** lo que suena de los tracks seleccionados, en el rango, pasa a un único clip en el track **Regrabación** (con plugins y faders, como lo escuchás). Se hace con un bounce offline de la salida que elegís, con esos tracks en solo; después los solos vuelven como estaban. El clip toma el nombre del primer clip del track de más arriba. Los originales quedan seleccionados: **⌘M** los mutea (el SDK no tiene un comando para mutear clips).
+- Atajos ⌃⌥⌘K / ⌃⌥⌘J solo se registran con las herramientas prendidas.
+
 ## Diseño y temas
 - **Temas:** ⚙︎ (o tocar el nombre de la sesión) → *Ajustes*: Automático (sigue el modo claro/oscuro del sistema), Estudio, Cabina, Noche y Día. Se guarda en cada dispositivo.
 - **Teléfono:** las vistas pasan a una barra abajo; en Grabar, el clip y los botones quedan arriba y la configuración debajo.

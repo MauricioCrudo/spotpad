@@ -201,6 +201,8 @@ dialog::backdrop{background:var(--scrim);-webkit-backdrop-filter:blur(3px);backd
 .hist .e{color:var(--err-text)}
 .themes{padding:14px 16px 4px;display:grid;gap:10px}
 .themes .tl{font-size:13px;color:var(--dim)}
+.edf{display:grid;gap:5px;font-size:13px;color:var(--dim)}
+.edf input,.edf select{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--text);font:inherit;font-size:15px;-webkit-user-select:text;user-select:text}
 .tlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}
 .tbtn{display:grid;gap:8px;justify-items:start;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--raised);text-align:left;font-size:13px;font-weight:600}
 .tbtn.sel{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 35%,transparent)}
@@ -412,6 +414,8 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
     <label class="tog"><input type="checkbox" id="recView"> Mover la vista de Pro Tools a cada clip (prueba)</label>
     <label class="tog"><input type="checkbox" id="recFollow"> Seguir Pro Tools (clic en un clip de spotting → aparece acá)</label>
     <label class="tog"><input type="checkbox" id="recShowDone"> Mostrar también los ya grabados</label>
+    <div id="recEdit" style="display:none"><div class="lbl2">Edición (prueba)</div><div style="display:flex;gap:8px">
+      <button class="hbtn" id="edCons" style="flex:1">Consolidar</button><button class="hbtn" id="edRegrab" style="flex:1">Regrabar</button></div></div>
     <div style="display:flex;gap:8px"><button class="hbtn" id="recRefresh" style="flex:1">Leer sesión</button><button class="hbtn" id="recRulesBtn">Reglas de pasos</button></div>
     <div class="hint" id="recAt" style="font-size:12px;color:var(--dim)"></div>
     <div id="recKeys" style="font-size:12px;color:var(--dim);line-height:1.6"></div>
@@ -466,6 +470,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
 <dialog id="stat">
   <div class="dhead"><b>Ajustes</b><button class="hbtn" id="statClose">Cerrar</button></div>
   <div class="themes"><div class="tl">Tema</div><div class="tlist" id="themeList"></div></div>
+  <div class="themes" id="editBox"></div>
   <div class="st" id="stBody"></div>
   <div class="sbtns">
     <button class="hbtn" id="stRecon">Reconectar</button>
@@ -636,6 +641,46 @@ async function renderUpdate(poll) {
     };
   }
 }
+// Herramientas de edición (en prueba): consolidar y regrabar. Apagadas por defecto.
+let editCfg = {enabled: false};
+async function loadEditCfg() { try { editCfg = (await api('/api/settings')).edit || editCfg; } catch {} applyEditUI(); }
+function applyEditUI() { const b = $('#recEdit'); if (b) b.style.display = editCfg.enabled ? '' : 'none'; }
+async function saveEdit(patch) {
+  try { editCfg = (await api('/api/settings', {method: 'PUT', body: JSON.stringify({edit: {...editCfg, ...patch}})})).edit; }
+  catch (e) { toast(e.message, true); }
+  applyEditUI(); renderEditBox();
+}
+async function renderEditBox() {
+  const box = $('#editBox'); await loadEditCfg();
+  box.innerHTML = `<div class="tl">Herramientas de edición (prueba)</div>
+    <label class="tog"><input type="checkbox" id="edOn"> Consolidar y regrabar desde SpotPad y con atajos</label>
+    <div id="edMore" style="display:grid;gap:8px"></div>`;
+  $('#edOn').checked = !!editCfg.enabled;
+  $('#edOn').onchange = e => saveEdit({enabled: e.target.checked});
+  if (!editCfg.enabled) return;
+  const m = $('#edMore');
+  m.innerHTML = `<div class="k2" style="font-size:13px">Consolidar (⌃⌥⌘K): consolida la selección en el mismo track con el nombre del primer clip.
+    Regrabar (⌃⌥⌘J): lo que suena de los tracks seleccionados pasa a un clip en el track de regrabación; después ⌘M mutea los originales.</div>
+    <label class="edf">Track de regrabación<input id="rgTrack" autocomplete="off"></label>
+    <label class="edf">Salida que escuchás (para el bounce)<select id="rgSrc"><option value="">(la primera)</option></select></label>
+    <label class="tog"><input type="checkbox" id="rgMono"> Regrabar en mono</label>`;
+  $('#rgTrack').value = editCfg.regrab_track || '';
+  $('#rgTrack').onchange = e => saveEdit({regrab_track: e.target.value});
+  $('#rgMono').checked = editCfg.regrab_mono !== false;
+  $('#rgMono').onchange = e => saveEdit({regrab_mono: e.target.checked});
+  api('/api/edit/sources').then(r => {
+    const sel = $('#rgSrc'); if (!sel) return;
+    (r.sources || []).forEach(n => { const o = document.createElement('option'); o.textContent = n; sel.append(o); });
+    sel.value = editCfg.regrab_source || '';
+  }).catch(() => {});
+  $('#rgSrc').onchange = e => saveEdit({regrab_source: e.target.value});
+}
+async function editRun(kind, btn) {
+  btn.disabled = true;
+  try { const r = await api('/api/edit/' + kind, {method: 'POST'}); toast(r.msg); buzz(true); }
+  catch (e) { toast(e.message, true); }
+  btn.disabled = false;
+}
 async function renderStat() {
   const b = $('#stBody'); b.innerHTML = '<div class="k2">Leyendo…</div>';
   let h; try { h = await (await fetch('/api/health')).json(); }
@@ -666,7 +711,7 @@ async function renderStat() {
     renderStat();
   };
 }
-$('#conn').onclick = $('#gearBtn').onclick = () => { renderThemes(); $('#stat').showModal(); renderStat(); };
+$('#conn').onclick = $('#gearBtn').onclick = () => { renderThemes(); renderEditBox(); $('#stat').showModal(); renderStat(); };
 $('#statClose').onclick = () => $('#stat').close();
 $('#reconBtn').onclick = reconnect;
 $('#stRecon').onclick = reconnect;
@@ -1294,6 +1339,9 @@ $('#recSurf').onchange = e => { recSt.surface_filter = e.target.value; recPutSta
 $('#recTrack').onchange = e => { recSt.rec_track = e.target.value; recPutState({rec_track: recSt.rec_track}); };
 $('#recAuto').onchange = e => { recSt.auto_rename = e.target.checked; recPutState({auto_rename: recSt.auto_rename}); };
 $('#recShowDone').onchange = () => recRender();
+$('#edCons').onclick = e => editRun('consolidate', e.currentTarget);
+$('#edRegrab').onclick = e => editRun('regrab', e.currentTarget);
+loadEditCfg();
 $('#recView').onchange = e => { recSt.move_view = e.target.checked; recPutState({move_view: recSt.move_view});
   toast(recSt.move_view ? 'Siguiente y Anterior van a mover la vista (usa el memory location 999 «SpotPad»)' : 'La vista no se mueve'); };
 $('#recFollow').onchange = e => { recSt.follow = e.target.checked; recPutState({follow: recSt.follow});

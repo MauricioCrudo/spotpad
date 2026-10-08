@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1953,6 +1953,8 @@ def with_ref(name: str) -> str:
     return name if naming.has_ref(name) else (f"{name} REF" if name else "REF")
 CURRENT = {"session": ""}       # sesión abierta (la actualiza /api/status)
 UPDATER = None                  # actualizador (lo pone la app de la barra de menú)
+EDIT = None                     # herramientas de edición (consolidar / regrabar), aparte del resto
+ON_SETTINGS = None              # la app reactiva los atajos cuando cambian los ajustes
 QUIT = None                     # cómo cerrar la app para que se instale la versión nueva
 
 
@@ -2227,18 +2229,58 @@ def make_app(pt, rec=None):
 
     @routes.get("/api/settings")
     async def get_settings(_):
-        return web.json_response({"events": False, **load_json(SETTINGS_FILE, {})})
+        cur = {"events": False, **load_json(SETTINGS_FILE, {})}
+        import edicion
+        cur["edit"] = {**edicion.DEFAULTS, **cur.get("edit", {})}
+        return web.json_response(cur)
+
+    # ---- Herramientas de edición (en prueba, aisladas: solo estas rutas y sus atajos) ---- #
+    global EDIT
+    import edicion
+    edit_settings = lambda: load_json(SETTINGS_FILE, {}).get("edit", {})
+    EDIT = (edicion.MockEditTools if isinstance(pt, MockProTools) else edicion.EditTools)(pt, edit_settings)
+
+    async def edit_call(fn):
+        try:
+            return web.json_response(await asyncio.get_running_loop().run_in_executor(None, fn))
+        except (SpotError, edicion.EditError) as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
+
+    @routes.post("/api/edit/consolidate")
+    async def edit_consolidate(_):
+        return await edit_call(EDIT.consolidate)
+
+    @routes.post("/api/edit/regrab")
+    async def edit_regrab(_):
+        return await edit_call(EDIT.regrab)
+
+    @routes.get("/api/edit/sources")
+    async def edit_sources(_):
+        return await edit_call(EDIT.sources)
 
     @routes.put("/api/settings")
     async def put_settings(req):
         body = await req.json()
         cur = {"events": False, **load_json(SETTINGS_FILE, {})}
+        if isinstance(body.get("edit"), dict):
+            e2 = {**edicion.DEFAULTS, **cur.get("edit", {})}
+            for k in edicion.DEFAULTS:
+                if k in body["edit"]:
+                    e2[k] = type(edicion.DEFAULTS[k])(body["edit"][k]) if not isinstance(edicion.DEFAULTS[k], str) \
+                        else str(body["edit"][k]).strip()
+            cur["edit"] = e2
+            log.info("Herramientas de edición: %s", e2)
         if "events" in body:
             cur["events"] = bool(body["events"])
             if hasattr(pt, "set_events"):
                 pt.set_events(cur["events"])
             log.info("Avisos de Pro Tools: %s", "prendidos" if cur["events"] else "apagados")
-        SETTINGS_FILE.write_text(json.dumps(cur, indent=2), "utf-8")
+        SETTINGS_FILE.write_text(json.dumps(cur, indent=2, ensure_ascii=False), "utf-8")
+        if ON_SETTINGS:
+            try:
+                ON_SETTINGS()
+            except Exception:                      # noqa: BLE001
+                log.exception("ajustes")
         return web.json_response(cur)
 
     async def rec_call(fn, *args):

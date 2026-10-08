@@ -188,7 +188,8 @@ def main():
         hk.notify("SpotPad", r.get("msg") or r.get("error", ""), icon)
 
     # Atajos de teclado globales (funcionan con Pro Tools en primer plano)
-    keys = hk.Hotkeys(rec, HOTKEYS_FILE, icon_ref=lambda: icon)
+    keys = hk.Hotkeys(rec, HOTKEYS_FILE, icon_ref=lambda: icon, edit=lambda: bridge.EDIT,
+                      edit_on=lambda: bool(bridge.EDIT and bridge.EDIT.cfg()["enabled"]))
 
     def keys_restart(icon, _):
         ok = keys.start()
@@ -244,6 +245,7 @@ def main():
     )
     icon = pystray.Icon("SpotPad", make_icon(), "SpotPad" + (" · MOCK" if a.mock else ""), menu)
     bridge.QUIT = lambda: quit_app(icon, None)      # el iPad puede pedir instalar la actualización
+    bridge.ON_SETTINGS = lambda: (keys.start(), icon.update_menu())   # prender/apagar edición cambia los atajos
 
     # La primera vez, mostrar cómo conectar el iPad
     first = DATA / ".first_run_done"

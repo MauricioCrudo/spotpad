@@ -20,7 +20,10 @@ ACTIONS = {
     "next": "Siguiente pendiente (posiciona y renombra)",
     "prev": "Anterior pendiente",
     "done_next": "Marcar grabado y pasar al siguiente",
+    "consolidate": "Consolidar con el nombre del primer clip (herramientas de edición)",
+    "regrab": "Regrabar la selección en un clip en Regrabación (herramientas de edición)",
 }
+EDIT_ACTIONS = ("consolidate", "regrab")   # solo se registran si las herramientas de edición están prendidas
 
 if sys.platform == "darwin":
     MOD = "<ctrl>+<alt>+<cmd>"
@@ -34,6 +37,8 @@ DEFAULTS = {
         "next": f"{MOD}+n",
         "prev": f"{MOD}+b",
         "done_next": f"{MOD}+g",
+        "consolidate": f"{MOD}+k",
+        "regrab": f"{MOD}+j",
     },
 }
 
@@ -318,8 +323,9 @@ def open_accessibility_settings():
 class Hotkeys:
     """Escucha los atajos y llama a las acciones del modo grabación."""
 
-    def __init__(self, rec, path, icon_ref=lambda: None):
+    def __init__(self, rec, path, icon_ref=lambda: None, edit=None, edit_on=lambda: False):
         self.rec, self.path, self.icon_ref = rec, path, icon_ref
+        self.edit, self.edit_on = edit, edit_on
         self.listener = None
         self.cfg = load(path)
         self.error = ""
@@ -331,7 +337,14 @@ class Hotkeys:
             "next": lambda: self.rec.step(1),
             "prev": lambda: self.rec.step(-1),
             "done_next": self.rec.done_next,
+            "consolidate": lambda: self.edit().consolidate(),
+            "regrab": lambda: self.edit().regrab(),
         }
+
+    def active_bindings(self):
+        """Los atajos a registrar: los de edición solo si están prendidas (si no, la tecla queda libre)."""
+        on = bool(self.edit and self.edit_on())
+        return {a: b for a, b in self.cfg["bindings"].items() if a in ACTIONS and (on or a not in EDIT_ACTIONS)}
 
     def run_action(self, name):
         """Corre la acción en otro hilo (el de teclado no se puede trabar) y avisa si falla."""
@@ -375,14 +388,14 @@ class Hotkeys:
         if sys.platform == "darwin":
             try:
                 ck = CarbonKeys()
-                mapping = {b: (lambda a=a: self.run_action(a)) for a, b in self.cfg["bindings"].items() if a in ACTIONS}
+                mapping = {b: (lambda a=a: self.run_action(a)) for a, b in self.active_bindings().items()}
                 bad = ck.register(mapping)
                 self.listener = ck
                 for b, err in bad:
                     log.warning("Atajo %s: %s", label(b), err)
                 self.error = ("no se pudieron activar: " + ", ".join(f"{label(b)} ({e})" for b, e in bad)) if bad else ""
                 log.info("Atajos activos (macOS, sin permisos): %s",
-                         ", ".join(f"{label(b)}={a}" for a, b in self.cfg["bindings"].items()))
+                         ", ".join(f"{label(b)}={a}" for a, b in self.active_bindings().items()))
                 return not bad
             except Exception as e:              # noqa: BLE001
                 log.warning("Atajos macOS: %s · pruebo con el método anterior (pide Accesibilidad)", e)
@@ -394,7 +407,7 @@ class Hotkeys:
             log.warning("Atajos: %s", self.error)
             return False
         mapping = {}
-        for action, binding in self.cfg["bindings"].items():
+        for action, binding in self.active_bindings().items():
             try:
                 keyboard.HotKey.parse(binding)
                 mapping[binding] = (lambda a=action: self.run_action(a))
@@ -427,4 +440,4 @@ class Hotkeys:
             self.listener = None
 
     def summary(self):
-        return [(ACTIONS[a], label(b)) for a, b in self.cfg["bindings"].items() if a in ACTIONS]
+        return [(ACTIONS[a], label(b)) for a, b in self.active_bindings().items()]
