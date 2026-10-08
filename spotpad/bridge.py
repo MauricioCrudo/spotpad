@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.13.0"
+VERSION = "0.13.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))

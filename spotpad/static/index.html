@@ -78,10 +78,16 @@ h2 b{color:var(--accent);font-weight:600}
 .empty{color:var(--dim);font-size:14px;padding:14px 2px;line-height:1.5}
 
 /* ===== Botonera ===== */
-.toolbar{display:flex;align-items:center;gap:6px;margin-bottom:12px}
-.cats{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;
-  -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);padding-right:20px}
-.cats::-webkit-scrollbar{display:none}
+.toolbar{display:flex;align-items:flex-start;gap:6px;margin-bottom:10px;min-width:0}
+main > section,#viewRec > section{min-width:0}
+.cats{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+.cats2{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;min-width:0}
+.cats2:empty{display:none}
+.cats2 .cat{padding:6px 12px 6px 10px;font-size:13px;display:inline-flex;align-items:center;gap:7px;border-style:solid}
+.cats2 .cat::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--cc,var(--accent));flex:none}
+.cats2 .cat.sel::before{background:color-mix(in srgb,var(--on-accent) 55%,transparent)}
+.cats2 .cat.add::before{display:none}
+.cats2 .cat.preset:not(.sel){border-style:solid}
 .cat{flex:none;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--dim);font-size:14px;font-weight:550}
 .cat.sel{color:var(--on-accent);background:var(--cc,var(--accent));border-color:transparent;font-weight:650}
 .cat.preset:not(.sel){border-style:dashed}
@@ -325,6 +331,11 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
   body.rec #viewRec{display:flex;flex-direction:column}
   body.rec #viewRec > section{flex:none}
   #editBtn .tx{display:none}
+  .cats .cat{padding:7px 12px;font-size:13px}
+  /* Categorías: dos filas que se deslizan de costado, en vez de ocupar media pantalla */
+  .cats2{display:grid;grid-auto-flow:column;grid-template-rows:auto auto;grid-auto-columns:max-content;
+    overflow-x:auto;scrollbar-width:none;margin:-2px -12px 10px;padding:0 12px;scroll-padding:12px}
+  .cats2::-webkit-scrollbar{display:none}
   .ctl{position:sticky;bottom:0;grid-template-columns:1fr 1fr 1fr 1.6fr;background:var(--surface);padding:8px 0;z-index:2}
   .ctl button{min-height:56px;font-size:14px}
   .card{padding:16px}
@@ -365,6 +376,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
       <button class="icon" id="editBtn" title="Editar botones, ocultar tracks" aria-label="Editar"><span class="ic">✎</span><span class="tx">Editar</span></button>
       <button class="icon" id="reload" title="Volver a leer los tracks de la sesión" aria-label="Volver a leer los tracks">↻</button>
     </div>
+    <div class="cats2" id="cats2"></div>
     <div class="namebar" id="namebar"><input id="clipName" placeholder="Nombre del clip (vacío: el del track)" autocomplete="off" autocapitalize="words"><button class="icon" id="clearName" aria-label="Borrar nombre">✕</button></div>
     <div class="recents" id="recents"></div>
     <div class="gwrap" id="gwrap"></div>
@@ -795,7 +807,7 @@ async function loadLayout(quiet) {
   renderCats(); renderGrid();
 }
 function renderCats() {
-  const c = $('#cats'); c.innerHTML = '';
+  const c = $('#cats'), c2 = $('#cats2'); c.innerHTML = ''; c2.innerHTML = '';
   if (!layout.tabs.length) {
     const n = document.createElement('span'); n.className = 'cathint';
     n.textContent = layoutErr ? 'Carpetas de la sesión: sin conexión con Pro Tools' : 'No hay carpetas con tracks en la sesión';
@@ -806,11 +818,13 @@ function renderCats() {
     b.className = 'cat ' + t.kind + (t.hiddenTab ? ' hiddentab' : '') + (t.key === tabKey ? ' sel' : ''); b.textContent = t.label;
     if (t.cat) b.style.setProperty('--cc', t.cat.color);
     b.onclick = () => { tabKey = t.key; ls.set(tabStore(), tabKey); $('#clipName').value = ''; renderCats(); renderGrid(); loadLayout(true); };
-    c.append(b);
+    (t.kind === 'preset' ? c2 : c).append(b);       // categorías preseteadas en su propia fila
   });
-  if (editing) {
+  const selc = c2.querySelector('.sel');             // en el teléfono la fila se desliza: mostrar la elegida
+  if (selc) try { selc.scrollIntoView({inline: 'nearest', block: 'nearest'}); } catch {}
+  if (editing && !foldersMode()) {
     const a = document.createElement('button'); a.className = 'cat add'; a.textContent = '+ Categoría';
-    a.onclick = () => openCat(null); c.append(a);
+    a.onclick = () => openCat(null); c2.append(a);
   }
 }
 function renderGrid() {
@@ -965,10 +979,8 @@ function renderPresetGrid(w, cat) {
     const name = iName(it), track = iTrack(it, cat);
     const b = document.createElement('button');
     b.className = 'pad'; b.style.setProperty('--cc', cat.color);
-    const parts = name.split(' '), head = parts.shift();
-    b.innerHTML = `<span class="k">${i + 1}</span><span><div class="sub"></div><div class="lab"></div><div class="dest"></div></span>`;
-    b.querySelector('.sub').textContent = head;
-    b.querySelector('.lab').textContent = parts.join(' ') || head;
+    b.innerHTML = `<span class="k">${i + 1}</span><span><div class="lab"></div><div class="dest"></div></span>`;
+    b.querySelector('.lab').textContent = name;
     const d = b.querySelector('.dest');
     d.textContent = track ? '→ ' + track : '→ track seleccionado';
     if (track && layout.tabs.length && !hasTrack(track)) { d.classList.add('miss'); d.textContent = '→ ' + track + ' (no está)'; }
