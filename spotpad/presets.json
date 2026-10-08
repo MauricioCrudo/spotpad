@@ -62,10 +62,36 @@
         "Writing pen",
         "Writing pencil"
       ]
+    },
+    {
+      "id": "computers",
+      "label": "Computers",
+      "color": "#8E7CC3",
+      "track": "Keyboards",
+      "items": [
+        "Laptop",
+        "Keyboard",
+        "Mouse",
+        "Button",
+        "Tablet"
+      ]
+    },
+    {
+      "id": "phones",
+      "label": "Cell phones",
+      "color": "#76A5AF",
+      "track": "Cell Phones",
+      "items": [
+        "Cell phone pocket",
+        "Cell phone hands",
+        "Cell phone table"
+      ]
     }
   ],
   "seen_defaults": [
+    "computers",
     "hands",
-    "papers"
+    "papers",
+    "phones"
   ]
 }
