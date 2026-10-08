@@ -674,17 +674,13 @@ async function renderEditBox() {
   m.innerHTML = `<div class="k2" style="font-size:13px">Consolidar (⌃⌥⌘K): consolida la selección en el mismo track con el nombre del primer clip.
     Regrabar (⌃⌥⌘J): lo que suena de los tracks seleccionados pasa a un clip en el track de regrabación; después ⌘M mutea los originales.</div>
     <label class="edf">Track de regrabación<input id="rgTrack" autocomplete="off"></label>
-    <label class="edf">Salida que escuchás (para el bounce)<select id="rgSrc"><option value="">(la primera)</option></select></label>
+    <label class="edf">Salida que escuchás, como figura en Bounce Mix<input id="rgSrc" autocomplete="off" placeholder="p. ej. Out 1-2"></label>
     <label class="tog"><input type="checkbox" id="rgMono"> Regrabar en mono</label>`;
   $('#rgTrack').value = editCfg.regrab_track || '';
   $('#rgTrack').onchange = e => saveEdit({regrab_track: e.target.value});
   $('#rgMono').checked = editCfg.regrab_mono !== false;
   $('#rgMono').onchange = e => saveEdit({regrab_mono: e.target.checked});
-  api('/api/edit/sources').then(r => {
-    const sel = $('#rgSrc'); if (!sel) return;
-    (r.sources || []).forEach(n => { const o = document.createElement('option'); o.textContent = n; sel.append(o); });
-    sel.value = editCfg.regrab_source || '';
-  }).catch(() => {});
+  $('#rgSrc').value = editCfg.regrab_source || '';
   $('#rgSrc').onchange = e => saveEdit({regrab_source: e.target.value});
 }
 async function editRun(kind, btn) {

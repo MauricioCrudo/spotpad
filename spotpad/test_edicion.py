@@ -74,7 +74,12 @@ except edicion.EditError:
 eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True), T("Regrabacion", 5, "r"),
            T("DX", 0, "d", solo=True)],
           {"Bags": [EdlEvent("Bags", "Prps Bag_02", 100, 190)], "Chairs": [EdlEvent("Chairs", "Prps Chair Wood_01", 150, 200)]})
-r = tools(eng, regrab_track="Regrabación").regrab()
+try:                                                          # sin salida escrita: avisa
+    tools(eng, regrab_track="Regrabación").regrab(); raise AssertionError
+except SpotError as ex:
+    assert "Bounce Mix" in str(ex)
+eng.solo.clear()
+r = tools(eng, regrab_track="Regrabación", regrab_source="Out 1-2").regrab()
 assert "Prps Chair Wood" in r["msg"], r                       # el primer clip del track de más arriba
 assert eng.spot.dst_track_id == "r" and eng.spot.src_clips == ["clip-1"]
 assert eng.solo[0] == (("DX",), False) and eng.solo[1] == (("Chairs", "Bags"), True)
@@ -86,4 +91,9 @@ try:
     tools(eng2).regrab(); raise AssertionError
 except SpotError as e:
     assert "Regrabación" in str(e)
+# Nunca GetExportMixSourceList ni GetColorPalette (cuelgan Pro Tools 2025.12)
+import pathlib
+for f in ("edicion.py", "bridge.py"):
+    code = "\n".join(l for l in pathlib.Path(__file__).with_name(f).read_text("utf-8").splitlines() if not l.strip().startswith("#"))
+    assert "GetExportMixSourceList\")" not in code and "GetColorPalette')" not in code, f
 print("edición OK")

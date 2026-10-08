@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.13.1"
+VERSION = "0.13.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1123,8 +1123,16 @@ class ProTools:
                     except Exception as ex:          # noqa: BLE001
                         log.info("Mover la vista: %s", ex)
                         notes.append("no pude mover la vista")
-                if self._selection_samples(e) != (int(start), int(end)):
-                    notes.append("no pude posicionar Pro Tools en el clip")
+                got = self._selection_samples(e)
+                if got != (int(start), int(end)):
+                    # Después de cambiar de track, Pro Tools a veces pisa el rango: aplicarlo de nuevo
+                    e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
+                                             location_type=pt.TLType_Samples)
+                    got2 = self._selection_samples(e)
+                    if got2 != (int(start), int(end)):
+                        log.info("Posicionar: pedí %s-%s en «%s», quedó %s y después %s",
+                                 start, end, track, got, got2)
+                        notes.append("no pude posicionar Pro Tools en el clip")
             msg = "Posicionado" if locate else "Listo"
             if rec_track_id and name:
                 tracks = e.track_list()

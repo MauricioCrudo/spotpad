@@ -113,15 +113,10 @@ class EditTools:
         return self._run(f, 120)
 
     # ---- regrabar en un solo clip ---------------------------------------------- #
+    # Ojo: NO usar GetExportMixSourceList. En Pro Tools 2025.12 cuelga y cierra Pro Tools (visto en
+    # la prueba real al abrir Ajustes). La salida se escribe a mano, como figura en Bounce Mix.
     def sources(self):
-        from bridge import _op
-        from ptsl import PTSL_pb2 as pt
-
-        def f(e):
-            op = _op("CId_GetExportMixSourceList")(type=pt.EMSType_Output)
-            e.client.run(op)
-            return {"ok": True, "sources": list(getattr(op.response, "source_list", []) or [])}
-        return self._run(f, 15)
+        return {"ok": True, "sources": []}
 
     def regrab(self):
         cfg = self.cfg()
@@ -145,14 +140,9 @@ class EditTools:
             name = next((base_clip_name(ev.clip) for t in sel
                          for ev in [first_clip(edl.get(t.name, []), a, b)] if ev), "") or "Regrabacion"
 
-            src = cfg["regrab_source"]
+            src = cfg["regrab_source"].strip()
             if not src:
-                op = _op("CId_GetExportMixSourceList")(type=pt.EMSType_Output)
-                e.client.run(op)
-                lst = list(getattr(op.response, "source_list", []) or [])
-                if not lst:
-                    raise EditError("Pro Tools no informó salidas para el bounce")
-                src = lst[0]
+                raise EditError("Escribí en Ajustes la salida que escuchás, como figura en Bounce Mix (p. ej. «Out 1-2»)")
 
             soloed = {t.name for t in tracks if self.pt._is_set(t.track_attributes.is_soloed)}
             sel_names = [t.name for t in sel]
