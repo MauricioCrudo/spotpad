@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# Si llega un push nuevo mientras compila, se cancela el anterior: dos publicaciones a la vez
+# se pisaban al borrar y crear «Última versión».
+concurrency:
+  group: compilar-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
