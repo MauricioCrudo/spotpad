@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.10.1"
+VERSION = "0.10.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -601,13 +601,8 @@ class ProTools:
         from ptsl import PTSL_pb2 as pt
 
         def f(e):
-            kw = dict(start_time=tc_str, name=name, time_properties=pt.TP_Marker,
-                      reference=pt.MLR_Absolute, location=pt.MarkerLocation_MainRuler)
-            try:
-                e.create_memory_location(**kw)
-            except TypeError:
-                kw.pop("location", None)
-                e.create_memory_location(**kw)
+            self._create_marker(e, dict(start_time=tc_str, name=name, time_properties=pt.TP_Marker,
+                                        reference=pt.MLR_Absolute, location=pt.MarkerLocation_MainRuler))
             return {"ok": True}
         return self._call(f)
 
@@ -1025,17 +1020,42 @@ class ProTools:
             a, _b = self._selection_samples(e)
             tc = self._tc(e)
             start = tc(a) if tc else str(a)
-            kw = dict(start_time=start, name=name.strip(), time_properties=pt.TP_Marker,
-                      reference=pt.MLR_Absolute, location=pt.MarkerLocation_MainRuler)
-            try:
-                e.create_memory_location(**kw)
-            except TypeError:                # versiones de py-ptsl sin «location»
-                kw.pop("location", None)
-                e.create_memory_location(**kw)
+            self._create_marker(e, dict(start_time=start, name=name.strip(), time_properties=pt.TP_Marker,
+                                        reference=pt.MLR_Absolute, location=pt.MarkerLocation_MainRuler))
             return {"ok": True, "msg": f"Marcador «{name.strip()}» en {start}"}
         return self._call(f)
 
     VIEW_LOC = 999          # memory location de SpotPad para mover la ventana de edición
+
+    def _free_number(self, e, taken=()):
+        """Primer número de memory location libre después del más alto (sin el 999 de SpotPad).
+        Sin número, Pro Tools elige uno que a veces ya está usado («number is already used»)."""
+        nums = set(taken)
+        try:
+            nums |= {int(m.number) for m in e.get_memory_locations()}
+        except Exception:                        # noqa: BLE001  (sesión sin markers)
+            pass
+        nums.discard(self.VIEW_LOC)
+        n = max(nums, default=0) + 1
+        return n + 1 if n == self.VIEW_LOC else n
+
+    def _create_marker(self, e, kw):
+        tried = set()
+        for _ in range(5):
+            n = self._free_number(e, tried)
+            tried.add(n)
+            try:
+                try:
+                    e.create_memory_location(memory_number=n, **kw)
+                except TypeError:                # versiones de py-ptsl sin «location»
+                    kw.pop("location", None)
+                    e.create_memory_location(memory_number=n, **kw)
+                return n
+            except Exception as ex:              # noqa: BLE001
+                if "already used" not in str(ex):
+                    raise
+                log.info("Marker: el número %s ya está usado, pruebo otro", n)
+        raise SpotError("Pro Tools no aceptó ningún número de marker libre")
 
     def _show_in_edit(self, e, start, end):
         """El SDK no puede desplazar la ventana de edición, pero recordar un memory location sí lo hace.

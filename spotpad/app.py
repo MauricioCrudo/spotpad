@@ -112,8 +112,19 @@ def main():
         stop = start_server(pt, a.port, rec)
     except OSError as e:
         log.error("No pude abrir el puerto %s: %s", a.port, e)
-        # Probablemente ya hay un SpotPad abierto: mostramos su página y salimos
-        webbrowser.open(local + "/conectar")
+        # ¿Ya hay un SpotPad abierto? Si contesta, mostramos su página; si no, avisamos qué pasa.
+        try:
+            with urllib.request.urlopen(local + "/api/health", timeout=3) as r:
+                running = r.status == 200
+        except Exception:                # noqa: BLE001
+            running = False
+        if running:
+            hk.notify("SpotPad", "SpotPad ya está abierto: buscá su ícono en la barra de menú.")
+            webbrowser.open(local + "/conectar")
+        else:
+            hk.notify("SpotPad", f"No puedo abrir: el puerto {a.port} lo está usando otro programa. "
+                                 "Cerralo o reiniciá la computadora.")
+        time.sleep(1)
         sys.exit(1)
     log.info("SpotPad %s · iPad: %s · datos: %s", APP_VERSION, ipad_url(a.port), DATA)
 

@@ -102,9 +102,16 @@ def shoe_in(text: str, rules) -> Optional[str]:
 
 
 def folder_kind(folder: str, rules) -> Optional[str]:
+    """Tipo de carpeta por nombre: igual a uno de la lista o con ese nombre como palabra
+    («FOLEY SUPERFICIES», «01 FTS»). Primero los nombres exactos."""
     f = norm(folder)
-    for kind, names in rules.get("folders", {}).items():
+    kinds = rules.get("folders", {}).items()
+    for kind, names in kinds:
         if f in {norm(x) for x in names}:
+            return kind
+    padded = " " + re.sub(r"[^A-Z0-9ÁÉÍÓÚÑ]+", " ", f) + " "
+    for kind, names in kinds:
+        if any(" " + norm(x) + " " in padded for x in names if norm(x)):
             return kind
     return None
 

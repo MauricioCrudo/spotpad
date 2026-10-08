@@ -89,3 +89,16 @@ pv._show_in_edit(ev, 48000, 96000); pv._show_in_edit(ev, 0, 48000)
 assert ran == ["CId_EditMemoryLocation", "CId_CreateMemoryLocation", "CId_SelectMemoryLocation",
                "CId_EditMemoryLocation", "CId_SelectMemoryLocation"], ran
 print("vista OK")
+
+# --- Markers: número libre explícito (sin número, Pro Tools elegía uno usado) ---
+class ME:
+    def __init__(s): s.used = {1, 2, 3, 4, 999}; s.made = []
+    def get_memory_locations(s): return [types.SimpleNamespace(number=n) for n in s.used]
+    def create_memory_location(s, memory_number=None, **kw):
+        if memory_number in s.used or memory_number == 5:     # el 5 lo ocupó otro justo antes
+            raise RuntimeError("ErrType 126: PT_InvalidParameter (Such a memory location number is already used.)")
+        s.used.add(memory_number); s.made.append(memory_number)
+me = ME()
+assert ProTools()._create_marker(me, {"name": "Esc 1"}) == 6 and me.made == [6]
+assert ProTools()._create_marker(me, {"name": "Esc 2"}) == 7
+print("markers OK")

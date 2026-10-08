@@ -86,7 +86,9 @@ def plan(result, tracks, edl, markers, to_samples, opts=None, rules=None):
 
     if opts["surfaces"]:
         if not surf_tracks:
-            notes.append("No encontré la carpeta de superficies (SUPERFICIES / SURFACES): no marco superficies.")
+            found = sorted({t.get("folder", "") for t in tracks if t.get("folder")})
+            notes.append("No encontré la carpeta de superficies (SUPERFICIES / SURFACES): no marco superficies. "
+                         + (f"Carpetas en la sesión: {', '.join(found)}." if found else "La sesión no tiene carpetas."))
         else:
             pending = []                          # (track, a, b, name, scene)
             for sc, a, b in scenes:
