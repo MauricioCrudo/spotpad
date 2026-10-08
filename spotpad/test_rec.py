@@ -102,3 +102,10 @@ me = ME()
 assert ProTools()._create_marker(me, {"name": "Esc 1"}) == 6 and me.made == [6]
 assert ProTools()._create_marker(me, {"name": "Esc 2"}) == 7
 print("markers OK")
+
+# --- Siguiente: la selección va al track del clip ---
+pm = MockProTools(); rm = RecController(pm); rm.refresh()
+rm.set_state({"sweep": ["Henry"], "rec_track": "t3", "cur": "", "text_filter": "", "surface_filter": ""})
+rm.step(1)
+assert pm.last_go_track == "Henry", getattr(pm, "last_go_track", None)
+print("track del clip OK")

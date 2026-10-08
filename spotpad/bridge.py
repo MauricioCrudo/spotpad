@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.11.0"
+VERSION = "0.11.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1072,8 +1072,9 @@ class ProTools:
             e.client.run(_op('CId_CreateMemoryLocation')(**kw))
         e.client.run(_op('CId_SelectMemoryLocation')(number=self.VIEW_LOC))
 
-    def rec_go(self, start: int, end: int, rec_track_id: str, name: str, locate: bool = True, view: bool = False):
-        """Posiciona Pro Tools en el clip y renombra el track de grabación."""
+    def rec_go(self, start: int, end: int, rec_track_id: str, name: str, locate: bool = True, view: bool = False,
+               track: str = ""):
+        """Posiciona Pro Tools en el clip (selección en el track del clip) y renombra el track de grabación."""
         from ptsl import PTSL_pb2 as pt
 
         def f(e):
@@ -1081,6 +1082,11 @@ class ProTools:
             if name and "Recording" in e.transport_state():
                 raise SpotError("Pro Tools está grabando: no renombro el track ahora")
             if locate:
+                if track:                            # la selección va en el track del clip, no donde estabas
+                    try:
+                        e.select_tracks_by_name([track])
+                    except Exception as ex:          # noqa: BLE001
+                        log.info("Seleccionar track %s: %s", track, ex)
                 e.set_timeline_selection(in_time=str(int(start)), out_time=str(int(end)),
                                          location_type=pt.TLType_Samples)
                 if view:
@@ -1315,7 +1321,8 @@ class MockProTools:
     def add_marker(self, name, color_index=-1):
         return {"ok": True, "msg": f"Marcador «{name}» (mock)"}
 
-    def rec_go(self, start, end, rec_track_id, name, locate=True, view=False):
+    def rec_go(self, start, end, rec_track_id, name, locate=True, view=False, track=""):
+        self.last_go_track = track
         if not rec_track_id:
             return {"ok": True, "msg": "Posicionado (mock) · sin track de grabación elegido"}
         t = next((t for t in self._tracks if t["id"] == rec_track_id), None)
@@ -1656,7 +1663,7 @@ class RecController:
                 self.save(st)
             do_rename = st.get("auto_rename", True) if rename is None else bool(rename)
             r = self.pt.rec_go(start, end, st.get("rec_track", ""), name.strip() if do_rename else "",
-                               view=bool(st.get("move_view")))
+                               view=bool(st.get("move_view")), track=(key or "").split("|")[0])
             return {**r, "cur": key or st.get("cur", "")}
 
     def _go_item(self, it, st):
