@@ -1194,7 +1194,7 @@ class MockProTools:
              [F(50, "Props"), F(51, "Hands", ), T(52, "Hands Body", 51), T(53, "Hands Surfaces", 51)] + \
              [T(54 + k, n, 50) for k, n in enumerate(
                   ["Movements", "Chairs", "Bags", "Bijou", "Cell Phones", "Glass Bottles", "Keyboards",
-                   "Papers", "Tableware", "Props 1", "Props 2"])]
+                   "Papers", "Tableware", "Props 1", "Props 2", "Vocals"])]
         tr[[t["id"] for t in tr].index("f51")]["parent_id"] = "f50"
         return build_layout(tr, exclude)
 
