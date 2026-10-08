@@ -41,7 +41,7 @@ old = {"track_prefixes": ["Prps", "Fts"], "categories": [{"id": "hands", "label"
 bridge.PRESETS_FILE.write_text(json.dumps(old), "utf-8")
 bridge.migrate_presets()
 u = json.loads(bridge.PRESETS_FILE.read_text("utf-8"))
-assert [c["id"] for c in u["categories"]] == ["hands", "papers", "computers", "phones", "chairs", "bags", "accessories", "glass", "tableware", "movements", "vocals"], u
+assert [c["id"] for c in u["categories"]] == ["hands", "papers", "computers", "phones", "chairs", "bags", "accessories", "glass", "tableware", "movements", "vocals", "clothes"], u
 pap = u["categories"][1]
 assert pap["track"] == "Papers" and "Writing pencil" in pap["items"] and u["categories"][0]["items"] == old["categories"][0]["items"]
 u["categories"] = u["categories"][:1]                     # la borra desde el iPad

@@ -174,12 +174,29 @@
         "Vocal kiss",
         "Vocal blow air"
       ]
+    },
+    {
+      "id": "clothes",
+      "label": "Clothes",
+      "color": "#B4A7D6",
+      "track": "Clothes",
+      "items": [
+        "Clothes",
+        "Cloth",
+        "Gloves",
+        "Coat",
+        "Jacket",
+        "Underwear",
+        "Socks",
+        "Shoe laces"
+      ]
     }
   ],
   "seen_defaults": [
     "accessories",
     "bags",
     "chairs",
+    "clothes",
     "computers",
     "glass",
     "hands",
