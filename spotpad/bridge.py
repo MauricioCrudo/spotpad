@@ -233,6 +233,18 @@ def build_report(pt) -> str:
     return "\n".join(out)
 
 
+def preset_prop(clip: str) -> bool:
+    """¿El clip es un botón de las categorías preseteadas? Esas son todas de props."""
+    from naming import tidy
+    want = tidy(clip).lower()
+    if not want:
+        return False
+    for c in load_json(PRESETS_FILE, {}).get("categories", []):
+        if any(tidy(item_name(i)).lower() == want for i in c.get("items", [])):
+            return True
+    return False
+
+
 def track_name_for(prefix: str, clip: str) -> str:
     """«Prps» + «Hands clap» → «Prps Hands clap». Si el clip ya trae el prefijo, no lo duplica."""
     from naming import tidy
@@ -809,7 +821,7 @@ class ProTools:
             target = next((t for t in tracks if t.id == track_id), None)
             if target is None:
                 raise SpotError("El track destino ya no existe en la sesión")
-            new = track_name_for(prefix, ev.clip)
+            new = track_name_for("Prps" if preset_prop(ev.clip) else prefix, ev.clip)
             if target.name == new:
                 return {"ok": True, "msg": f"«{new}» ya tenía ese nombre"}
             taken = {t.name for t in tracks if t.id != track_id}
@@ -1172,7 +1184,7 @@ class MockProTools:
         t = next((t for t in self._tracks if t["id"] == track_id), None)
         if not t:
             raise SpotError("El track destino ya no existe en la sesión")
-        new = track_name_for(prefix, self._last)
+        new = track_name_for("Prps" if preset_prop(self._last) else prefix, self._last)
         old, t["name"] = t["name"], new
         return {"ok": True, "msg": f"«{old}» → «{new}» (mock)"}
 
@@ -1193,8 +1205,8 @@ class MockProTools:
               T(36, "Boots", 30, "#8A5A2B"), T(37, "Barefoot", 30), T(38, "Group", 30)] + \
              [F(50, "Props"), F(51, "Hands", ), T(52, "Hands Body", 51), T(53, "Hands Surfaces", 51)] + \
              [T(54 + k, n, 50) for k, n in enumerate(
-                  ["Movements", "Chairs", "Bags", "Bijou", "Cell Phones", "Glass Bottles", "Keyboards",
-                   "Papers", "Tableware", "Props 1", "Props 2"])]
+                  ["Movements", "Movement Clothes", "Chairs", "Bags", "Accessories and Bijou", "Cell Phones", "Glass Bottles", "Keyboards",
+                   "Papers", "Tableware", "Props 1", "Props 2", "Vocals"])]
         tr[[t["id"] for t in tr].index("f51")]["parent_id"] = "f50"
         return build_layout(tr, exclude)
 
