@@ -1205,7 +1205,7 @@ class MockProTools:
               T(36, "Boots", 30, "#8A5A2B"), T(37, "Barefoot", 30), T(38, "Group", 30)] + \
              [F(50, "Props"), F(51, "Hands", ), T(52, "Hands Body", 51), T(53, "Hands Surfaces", 51)] + \
              [T(54 + k, n, 50) for k, n in enumerate(
-                  ["Movements", "Chairs", "Bags", "Accessories and Bijou", "Cell Phones", "Glass Bottles", "Keyboards",
+                  ["Movements", "Movement Clothes", "Chairs", "Bags", "Accessories and Bijou", "Cell Phones", "Glass Bottles", "Keyboards",
                    "Papers", "Tableware", "Props 1", "Props 2", "Vocals"])]
         tr[[t["id"] for t in tr].index("f51")]["parent_id"] = "f50"
         return build_layout(tr, exclude)

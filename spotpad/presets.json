@@ -179,7 +179,7 @@
       "id": "clothes",
       "label": "Clothes",
       "color": "#B4A7D6",
-      "track": "Clothes",
+      "track": "Movement Clothes",
       "items": [
         "Clothes",
         "Cloth",
