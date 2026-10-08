@@ -46,6 +46,7 @@ jobs:
           python test_active.py
           python test_ai.py
           python test_project.py
+          python test_updater.py
       - name: Compilar
         run: pyinstaller --noconfirm spotpad.spec
       - name: Prueba de arranque (Mac)
@@ -154,6 +155,11 @@ jobs:
     if: always() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: spotpad/bridge.py
+          sparse-checkout-cone-mode: false
+          path: src
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -165,10 +171,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           ls out
+          VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' src/spotpad/bridge.py)
+          echo "Versión $VER"
           gh release delete ultima --yes --cleanup-tag || true
           gh release create ultima out/*.zip --prerelease --target "${{ github.sha }}" \
-            --title "Última versión" \
-            --notes "Compilado automáticamente desde ${GITHUB_SHA::7}. Bajá el zip de tu computadora."
+            --title "Última versión · SpotPad $VER" \
+            --notes "SpotPad $VER · compilado automáticamente desde ${GITHUB_SHA::7}. Bajá el zip de tu computadora, o actualizá desde SpotPad (ícono → Actualizar)."
           # gh sube los zips a un borrador y después lo publica; si ese último paso falla, la
           # versión queda invisible. Publicarla de nuevo y verificar.
           for i in 1 2 3; do

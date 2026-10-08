@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.10.2"
+VERSION = "0.11.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1911,6 +1911,8 @@ def with_ref(name: str) -> str:
     name = (name or "").strip()
     return name if naming.has_ref(name) else (f"{name} REF" if name else "REF")
 CURRENT = {"session": ""}       # sesión abierta (la actualiza /api/status)
+UPDATER = None                  # actualizador (lo pone la app de la barra de menú)
+QUIT = None                     # cómo cerrar la app para que se instale la versión nueva
 
 
 def make_app(pt, rec=None):
@@ -2098,6 +2100,28 @@ def make_app(pt, rec=None):
             except Exception:                      # noqa: BLE001
                 log.exception("proyecto")
         return resp
+
+    # Actualizar desde GitHub
+    @routes.get("/api/update")
+    async def update_status(_):
+        if UPDATER is None:
+            return web.json_response({"current": VERSION, "available": False, "state": "off", "can_install": False})
+        if time.time() - UPDATER.checked_at > 6 * 3600 and UPDATER.state != "checking":
+            await asyncio.get_running_loop().run_in_executor(None, UPDATER.check)
+        return web.json_response(UPDATER.status())
+
+    @routes.post("/api/update/check")
+    async def update_check(_):
+        if UPDATER is None:
+            return web.json_response({"ok": False, "error": "El actualizador funciona en la app instalada"}, status=409)
+        return web.json_response(await asyncio.get_running_loop().run_in_executor(None, UPDATER.check))
+
+    @routes.post("/api/update/install")
+    async def update_install(_):
+        if UPDATER is None or QUIT is None:
+            return web.json_response({"ok": False, "error": "El actualizador funciona en la app instalada"}, status=409)
+        r = UPDATER.install(QUIT)
+        return web.json_response(r, status=200 if r.get("ok") else 409)
 
     @routes.get("/api/project")
     async def project_get(_):

@@ -16,6 +16,9 @@ La configuración queda en `~/Library/Application Support/SpotPad` (Mac) o `%APP
 
 Cada cambio que se sube al repo se compila solo (GitHub Actions) y reemplaza la «Última versión».
 
+## Actualizar
+Desde la 0.11.0, SpotPad se actualiza solo: al abrirse revisa GitHub y, si hay versión nueva, avisa. Ícono → **Actualizar a …** (o en el iPad, *Ajustes → Actualizar*) la baja, cierra SpotPad, cambia la app y la vuelve a abrir. Tus presets, proyectos y reglas quedan como estaban. Bajada así, macOS no pide clic derecho → Abrir.
+
 ## Si algo falla
 - **Punto rojo / «Pro Tools no responde»:** tocá **↻ Reconectar** (aparece arriba en el iPad, o en el menú del ícono: *Reconectar con Pro Tools*). Si Pro Tools deja un pedido sin contestar, SpotPad además reconecta solo a los 15 s.
 - Antes de reconectar, fijate que Pro Tools no tenga una ventana o aviso abierto esperando respuesta: mientras lo tiene, no le contesta al SDK.

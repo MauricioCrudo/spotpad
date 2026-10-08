@@ -83,7 +83,7 @@ def selftest(port):
     pt = MockProTools()
     stop = start_server(pt, port, RecController(pt))
     try:
-        for path in ("/api/status", "/api/layout", "/", "/conectar", "/api/health", "/api/report"):
+        for path in ("/api/status", "/api/layout", "/", "/conectar", "/api/health", "/api/report", "/api/update"):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
                 assert r.status == 200, (path, r.status)
         print(f"selftest OK · datos en {DATA}")
@@ -159,6 +159,34 @@ def main():
                 pass
         threading.Thread(target=work, daemon=True).start()
 
+    # Actualizador (GitHub «Última versión»)
+    import updater
+    upd = updater.Updater(APP_VERSION)
+    bridge.UPDATER = upd
+
+    def after_check():
+        upd.check()
+        if upd.available():
+            hk.notify("SpotPad", f"Hay una versión nueva ({upd.latest['version']}). "
+                                 "Ícono → Actualizar, o desde Ajustes en el iPad.", icon)
+        try:
+            icon.update_menu()
+        except Exception:               # noqa: BLE001
+            pass
+    threading.Timer(8, after_check).start()
+
+    def do_update(icon, _):
+        if not upd.available():
+            def work():
+                upd.check()
+                hk.notify("SpotPad", f"Hay una versión nueva ({upd.latest['version']}): tocá de nuevo para instalarla."
+                          if upd.available() else (upd.error or f"Ya tenés la última versión ({APP_VERSION})."), icon)
+                icon.update_menu()
+            threading.Thread(target=work, daemon=True).start()
+            return
+        r = upd.install(lambda: quit_app(icon, None))
+        hk.notify("SpotPad", r.get("msg") or r.get("error", ""), icon)
+
     # Atajos de teclado globales (funcionan con Pro Tools en primer plano)
     keys = hk.Hotkeys(rec, HOTKEYS_FILE, icon_ref=lambda: icon)
 
@@ -205,6 +233,9 @@ def main():
         Menu.SEPARATOR,
         Item("Atajos de teclado", Menu(lambda: keys_items().items)),
         Item("Reconectar con Pro Tools", do_reconnect),
+        Item(lambda _: (f"Actualizar a {upd.latest['version']}" if upd.available() else
+                        ("Actualizando…" if upd.state in ("downloading", "installing") else "Buscar actualización")),
+             do_update),
         Item("Generar informe para soporte", make_report),
         Item("Ver registro", lambda *_: open_path(LOG_FILE)),
         Item("Carpeta de configuración", lambda *_: open_path(DATA)),
@@ -212,6 +243,7 @@ def main():
         Item(f"Salir (v{APP_VERSION})", quit_app),
     )
     icon = pystray.Icon("SpotPad", make_icon(), "SpotPad" + (" · MOCK" if a.mock else ""), menu)
+    bridge.QUIT = lambda: quit_app(icon, None)      # el iPad puede pedir instalar la actualización
 
     # La primera vez, mostrar cómo conectar el iPad
     first = DATA / ".first_run_done"

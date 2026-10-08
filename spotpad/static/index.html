@@ -608,13 +608,41 @@ async function reconnect() {
   catch (e) { toast(e.message, true); }
   await poll(); if ($('#stat').open) renderStat();
 }
+// Actualizar desde GitHub: se ve en Ajustes; instala, cierra SpotPad en la computadora y vuelve a abrirlo
+async function renderUpdate(poll) {
+  const box = $('#updBox'); if (!box) return;
+  let u; try { u = await (await fetch('/api/update')).json(); } catch { return; }
+  if (u.state === 'downloading' || u.state === 'installing') {
+    box.textContent = u.state === 'downloading' ? `· bajando ${Math.round(u.progress * 100)} %` : '· instalando…';
+    return setTimeout(() => renderUpdate(true), 1000);
+  }
+  if (u.available) {
+    box.innerHTML = `<button class="hbtn" id="updGo" style="margin-left:6px">Actualizar a ${u.latest}</button>`;
+    $('#updGo').onclick = async () => {
+      try { const r = await api('/api/update/install', {method: 'POST'}); toast(r.msg || 'Actualizando');
+            box.textContent = '· bajando…'; setTimeout(() => renderUpdate(true), 1000); }
+      catch (e) { toast(e.message, true); }
+    };
+  } else if (u.state === 'off') {
+    box.textContent = '';
+  } else {
+    box.innerHTML = `<button class="hbtn" id="updChk" style="margin-left:6px">${u.error ? 'Reintentar' : 'Buscar actualización'}</button>`;
+    $('#updChk').onclick = async () => {
+      box.textContent = '· buscando…';
+      try { const r = await api('/api/update/check', {method: 'POST'});
+            toast(r.available ? `Hay una versión nueva: ${r.latest}` : r.error || 'Ya tenés la última versión'); }
+      catch (e) { toast(e.message, true); }
+      renderUpdate();
+    };
+  }
+}
 async function renderStat() {
   const b = $('#stBody'); b.innerHTML = '<div class="k2">Leyendo…</div>';
   let h; try { h = await (await fetch('/api/health')).json(); }
   catch { b.innerHTML = '<div class="bad">No hay conexión con la computadora (¿está abierto SpotPad?)</div>'; return; }
   const row = (k, v, cls = '') => `<div class="row2"><span class="k2">${k}</span><span class="v2 ${cls}">${v}</span></div>`;
   const esc = t => String(t).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
-  let html = row('Versión', esc(h.version));
+  let html = row('Versión', esc(h.version) + ' <span id="updBox"></span>');
   html += row('Pro Tools', $('#dot').classList.contains('on') ? 'conectado' : 'sin conexión', $('#dot').classList.contains('on') ? '' : 'bad');
   if (h.inflight) html += row('Esperando respuesta', `${esc(h.inflight.command)} · ${h.inflight.seconds} s`, h.inflight.seconds > 5 ? 'warn' : '');
   if (h.needs_pt_restart) html += '<div class="bad"><b>Pro Tools dejó de aceptar conexiones del SDK.</b> Guardá, cerrá y volvé a abrir Pro Tools: SpotPad se reconecta solo.</div>';
@@ -629,6 +657,7 @@ async function renderStat() {
     `<div><span>${x.at}</span><span class="c">${esc(x.command)}</span><span>${x.ms} ms</span>${x.result === 'ok' ? '' : `<span class="e">${esc(x.result)}</span>`}</div>`
   ).join('') + '</div>';
   b.innerHTML = html;
+  renderUpdate();
   const tog = $('#evTog');
   if (tog) tog.onclick = async () => {
     try { const r = await api('/api/settings', {method: 'PUT', body: JSON.stringify({events: evStatus === 'apagados'})});
