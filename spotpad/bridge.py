@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.11.1"
+VERSION = "0.11.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -969,12 +969,17 @@ class ProTools:
             state = e.transport_state()
             if state != "TS_TransportStopped":          # grabando/reproduciendo: no tocar nada
                 return {"tracks": [], "in": 0, "out": 0, "state": state}
-            flt = [pt.TrackListInvertibleFilter(filter=pt.TLFilter_Selected, is_inverted=False)]
-            tracks = e.track_list(filters=flt)
-            if not tracks:
+            # Igual que el atajo «renombrar desde la selección» (que sí funciona): el track con
+            # selección de edición. El filtro «Selected» solo ve tracks con el nombre resaltado, y al
+            # hacer clic en un clip el track no queda resaltado salvo con Link Track and Edit Selection.
+            tracks = e.track_list()
+            cand = [t for t in tracks if self._is_set(t.track_attributes.has_edit_selection)]
+            if not cand:
+                cand = [t for t in tracks if self._is_set(t.track_attributes.is_selected)]
+            if not cand:
                 return {"tracks": [], "in": 0, "out": 0}
             a, b = self._selection_samples(e)
-            return {"tracks": [t.name for t in sorted(tracks, key=lambda t: t.index)], "in": a, "out": b}
+            return {"tracks": [t.name for t in sorted(cand, key=lambda t: t.index)], "in": a, "out": b}
         return self._call(f, timeout=5)
 
     def rename_clip_at(self, track: str, start: int, end: int, new_name: str):
@@ -1719,9 +1724,15 @@ class RecController:
         sig = (tuple(sel["tracks"]), sel["in"], sel["out"])
         if sig == self._last_sel or not sel["tracks"]:
             return None
+        if not self.snap:                    # todavía no se leyó la sesión: leerla sola (antes no hacía nada)
+            if time.time() - self._last_auto_refresh < 20:
+                return None
+            self._last_auto_refresh = time.time()
+            try:
+                self.refresh()
+            except SpotError:
+                return None
         self._last_sel = sig
-        if not self.snap:
-            return None
         with self.lock:
             st = self.store()
             for tname in sel["tracks"]:

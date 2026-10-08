@@ -109,3 +109,25 @@ rm.set_state({"sweep": ["Henry"], "rec_track": "t3", "cur": "", "text_filter": "
 rm.step(1)
 assert pm.last_go_track == "Henry", getattr(pm, "last_go_track", None)
 print("track del clip OK")
+
+# --- Seguir Pro Tools sin haber tocado «Leer sesión»: lee la sesión sola ---
+pf = MockProTools(); rf = RecController(pf)
+rf.set_state({"follow": True, "rec_track": "t3", "cur": "", "sweep": [], "text_filter": "", "surface_filter": ""})
+pf.mock_sel = {"tracks": ["Chairs"], "in": 8 * 48000, "out": 9 * 48000}
+it = rf.follow_tick()
+assert it and it["name"] == "Prps Chair Sit" and rf.snap, it
+print("seguir sin leer OK")
+
+# --- follow_selection real: usa el track con selección de edición (no solo el resaltado) ---
+from ptsl import PTSL_pb2 as ptpb2
+class FT:
+    def __init__(s, name, idx, edit, sel): s.name, s.index = name, idx; s.track_attributes = types.SimpleNamespace(
+        has_edit_selection=edit, is_selected=sel)
+class FE:
+    def transport_state(s): return "TS_TransportStopped"
+    def track_list(s, filters=None): return [FT("Chairs", 2, 2, 1), FT("Video", 1, 1, 1)]
+class PF(ProTools):
+    def _call(s, fn, timeout=None): return fn(FE())
+    def _selection_samples(s, e): return (10, 20)
+assert PF().follow_selection() == {"tracks": ["Chairs"], "in": 10, "out": 20}
+print("seguir selección OK")
