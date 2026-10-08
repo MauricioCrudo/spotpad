@@ -94,3 +94,16 @@ assert q["items"][0]["name"] == "Prps Chair Sit" and q["items"][0]["ref"], q["it
 from bridge import with_ref
 assert with_ref("Chair sit") == "Chair sit REF" and with_ref("Chair REF") == "Chair REF" and with_ref("") == "REF"
 print("ref OK")
+
+# --- Las categorías preseteadas son props: siempre Prps ---
+q = build_queue([{"name": "Papers", "color": "", "folder": "PRPS"}, {"name": "Vocals", "color": "", "folder": ""}],
+                {"Papers": [EdlEvent("Papers", "Pen.grp.01", 0, 10)], "Vocals": [EdlEvent("Vocals", "Vocal sip", 20, 30)]},
+                ["Papers", "Vocals"], DEFAULT_RULES, {}, set())
+assert [i["name"] for i in q["items"]] == ["Prps Pen", "Prps Vocal Sip"], q["items"]
+import os, tempfile
+os.environ.setdefault("SPOTPAD_DATA", tempfile.mkdtemp())
+from bridge import MockProTools, preset_prop
+assert preset_prop("Chair wood.grp.02") and preset_prop("VOCAL SIP REF") and not preset_prop("Henry")
+pm = MockProTools(); pm._last = "Chair wood"
+assert "Prps Chair Wood" in pm.rename_track_to_selection("t2", "Fts")["msg"]    # aunque el selector diga Fts
+print("prps OK")

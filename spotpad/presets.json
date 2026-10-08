@@ -113,9 +113,9 @@
     },
     {
       "id": "accessories",
-      "label": "Accessories",
+      "label": "Accessories and Bijou",
       "color": "#D5A6BD",
-      "track": "Bijou",
+      "track": "Accessories and Bijou",
       "items": [
         "Glasses",
         "Necklace",
