@@ -30,3 +30,22 @@ assert new == [{"name": "Hands body", "track": "Hands Body"},
 bridge.migrate_presets()                                   # no vuelve a tocar nada
 assert json.loads(bridge.PRESETS_FILE.read_text("utf-8"))["categories"][0]["items"] == new
 print("presets OK")
+
+# --- Categorías de fábrica nuevas: se suman una vez a instalaciones viejas y no vuelven si las borrás ---
+import json, os, tempfile, importlib
+os.environ["SPOTPAD_DATA"] = tempfile.mkdtemp()
+import bridge
+importlib.reload(bridge)
+old = {"track_prefixes": ["Prps", "Fts"], "categories": [{"id": "hands", "label": "Manos", "color": "#E8A33D",
+       "items": [{"name": "Hands clap", "track": "Hands Body"}]}]}
+bridge.PRESETS_FILE.write_text(json.dumps(old), "utf-8")
+bridge.migrate_presets()
+u = json.loads(bridge.PRESETS_FILE.read_text("utf-8"))
+assert [c["id"] for c in u["categories"]] == ["hands", "papers"], u
+pap = u["categories"][1]
+assert pap["track"] == "Papers" and "Writing pencil" in pap["items"] and u["categories"][0]["items"] == old["categories"][0]["items"]
+u["categories"] = u["categories"][:1]                     # la borra desde el iPad
+bridge.PRESETS_FILE.write_text(json.dumps(u), "utf-8")
+bridge.migrate_presets()
+assert [c["id"] for c in json.loads(bridge.PRESETS_FILE.read_text("utf-8"))["categories"]] == ["hands"]
+print("categorías de fábrica OK")

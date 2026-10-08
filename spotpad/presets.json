@@ -1,21 +1,71 @@
 {
-  "track_prefixes": ["Prps", "Fts"],
+  "track_prefixes": [
+    "Prps",
+    "Fts"
+  ],
   "categories": [
     {
       "id": "hands",
       "label": "Manos",
       "color": "#E8A33D",
       "items": [
-        {"name": "Hands body", "track": "Hands Body"},
-        {"name": "Hands skin", "track": "Hands Body"},
-        {"name": "Hands clap", "track": "Hands Body"},
-        {"name": "Hands punch", "track": "Hands Body"},
-        {"name": "Hands grab body", "track": "Hands Body"},
-        {"name": "Hands surface wood", "track": "Hands Surfaces"},
-        {"name": "Hands surface metal", "track": "Hands Surfaces"},
-        {"name": "Hands surface marble", "track": "Hands Surfaces"},
-        {"name": "Hands surface concrete", "track": "Hands Surfaces"}
+        {
+          "name": "Hands body",
+          "track": "Hands Body"
+        },
+        {
+          "name": "Hands skin",
+          "track": "Hands Body"
+        },
+        {
+          "name": "Hands clap",
+          "track": "Hands Body"
+        },
+        {
+          "name": "Hands punch",
+          "track": "Hands Body"
+        },
+        {
+          "name": "Hands grab body",
+          "track": "Hands Body"
+        },
+        {
+          "name": "Hands surface wood",
+          "track": "Hands Surfaces"
+        },
+        {
+          "name": "Hands surface metal",
+          "track": "Hands Surfaces"
+        },
+        {
+          "name": "Hands surface marble",
+          "track": "Hands Surfaces"
+        },
+        {
+          "name": "Hands surface concrete",
+          "track": "Hands Surfaces"
+        }
+      ]
+    },
+    {
+      "id": "papers",
+      "label": "Papers",
+      "color": "#6FA8DC",
+      "track": "Papers",
+      "items": [
+        "Paper",
+        "Pen",
+        "Pencil",
+        "Folder",
+        "Book",
+        "Notebook",
+        "Writing pen",
+        "Writing pencil"
       ]
     }
+  ],
+  "seen_defaults": [
+    "hands",
+    "papers"
   ]
 }

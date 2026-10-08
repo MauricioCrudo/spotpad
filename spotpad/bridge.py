@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.11.2"
+VERSION = "0.11.3"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -128,6 +128,17 @@ def migrate_presets():
                for i in cat.get("items", [])]
         if new != cat.get("items"):
             cat["items"], changed = new, True
+    # Categorías de fábrica nuevas (p. ej. Papers): se suman una sola vez. Si después la borrás,
+    # no vuelve (seen_defaults recuerda cuáles ya se ofrecieron).
+    have = {c.get("id") for c in user.get("categories", [])}
+    seen = set(user.get("seen_defaults") or have)
+    for cat in default.get("categories", []):
+        if cat["id"] not in seen and cat["id"] not in have:
+            user.setdefault("categories", []).append(cat)
+            changed = True
+    all_ids = sorted(seen | {c["id"] for c in default.get("categories", [])})
+    if user.get("seen_defaults") != all_ids:
+        user["seen_defaults"], changed = all_ids, True
     if changed:
         PRESETS_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
 
