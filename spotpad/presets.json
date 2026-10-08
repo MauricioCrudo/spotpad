@@ -86,12 +86,107 @@
         "Cell phone hands",
         "Cell phone table"
       ]
+    },
+    {
+      "id": "chairs",
+      "label": "Chairs",
+      "color": "#C27C4E",
+      "track": "Chairs",
+      "items": [
+        "Chair wood",
+        "Chair metal",
+        "Chair plastic",
+        "Office chair"
+      ]
+    },
+    {
+      "id": "bags",
+      "label": "Bags and backpacks",
+      "color": "#A0785A",
+      "track": "Bags",
+      "items": [
+        "Bag",
+        "Backpack",
+        "Carry on",
+        "Briefcase"
+      ]
+    },
+    {
+      "id": "accessories",
+      "label": "Accessories",
+      "color": "#D5A6BD",
+      "track": "Bijou",
+      "items": [
+        "Glasses",
+        "Necklace",
+        "Earring",
+        "Chain"
+      ]
+    },
+    {
+      "id": "glass",
+      "label": "Glasses and bottles",
+      "color": "#6FC2C8",
+      "track": "Glass Bottles",
+      "items": [
+        "Glass",
+        "Paper cup",
+        "Glasses toast",
+        "Bottle",
+        "Bottle serve",
+        "Jar",
+        "Jar serve",
+        "Mug"
+      ]
+    },
+    {
+      "id": "tableware",
+      "label": "Tableware and dishes",
+      "color": "#E6B85C",
+      "track": "Tableware",
+      "items": [
+        "Dish",
+        "Paper dish",
+        "Tableware",
+        "Food on dish"
+      ]
+    },
+    {
+      "id": "movements",
+      "label": "Movements",
+      "color": "#93C47D",
+      "track": "Movements",
+      "items": [
+        "Movement sit down",
+        "Movement stand up",
+        "Movement fast",
+        "Movement bed"
+      ]
+    },
+    {
+      "id": "vocals",
+      "label": "Vocals",
+      "color": "#E06666",
+      "track": "Vocals",
+      "items": [
+        "Vocal drink",
+        "Vocal sip",
+        "Vocal kiss",
+        "Vocal blow air"
+      ]
     }
   ],
   "seen_defaults": [
+    "accessories",
+    "bags",
+    "chairs",
     "computers",
+    "glass",
     "hands",
+    "movements",
     "papers",
-    "phones"
+    "phones",
+    "tableware",
+    "vocals"
   ]
 }
