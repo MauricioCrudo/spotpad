@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.14.0"
+VERSION = "0.14.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1178,6 +1178,8 @@ class MockProTools:
     def status(self):
         return {"connected": True, "session": "MOCK_R1_Foley", "ptsl": 0, "mock": True}
 
+    mock_transport = "TS_TransportStopped"
+
     def group_and_name(self, name):
         self._last = name
         return {"ok": True, "msg": f"Clip group «{name}» (mock)"}
@@ -1220,7 +1222,7 @@ class MockProTools:
 
     # -- IA (mock): guarda lo que haría en self.ai_log y suma los clips a su EDL -- #
     def transport(self):
-        return "TS_TransportStopped"
+        return self.mock_transport
 
     def _mock_tc(self):
         return TcConverter(48000, "00:59:58:00", rate_from_enum("STCR_Fps24"))
@@ -1612,10 +1614,32 @@ class RecController:
 
     _snap_t = 0.0
 
-    def artist_view(self, kind="props", max_age=120):
-        """Vista del artista (solo lectura): todos los clips de props (o pasos) con su estado.
-        Usa la foto de la sesión; si tiene más de max_age segundos y Pro Tools está parado, la relee."""
-        if not self.snap or time.time() - self._snap_t > max_age:
+    _tp_last, _tp_t = "", 0.0
+
+    def _transport_changed(self):
+        """¿Pro Tools acaba de parar después de grabar o reproducir? (lo mira como mucho cada 3 s)"""
+        if time.time() - self._tp_t < 3:
+            return False
+        self._tp_t = time.time()
+        try:
+            now = self.pt.transport()
+        except Exception:                        # noqa: BLE001
+            return False
+        stopped_now = now == "TS_TransportStopped" and self._tp_last not in ("", "TS_TransportStopped")
+        self._tp_last = now
+        return stopped_now
+
+    def refresh_if_stopped(self):
+        if self._transport_changed():
+            log.info("Pro Tools paró: releo la sesión (mutes nuevos = grabados)")
+            self.refresh()
+
+    def artist_view(self, kind="sweep", max_age=60):
+        """Vista del artista (solo lectura): los clips con su estado (muteado = grabado).
+        kind: «sweep» = lo que se está barriendo en Grabar, «props», «fts» o «all».
+        Relee la sesión si la foto tiene más de max_age segundos o si Pro Tools acaba de parar
+        de grabar/reproducir (así los clips que muteaste aparecen como grabados enseguida)."""
+        if not self.snap or time.time() - self._snap_t > max_age or self._transport_changed():
             try:
                 self.refresh()
             except SpotError as e:
@@ -1626,8 +1650,12 @@ class RecController:
                     "items": []}
         st, snap, rules = self.store(), self.snap, load_rules()
         kinds = {t["name"]: naming.folder_kind(t["folder"], rules) for t in snap["tracks"]}
-        want = {"props": ("props",), "fts": ("footsteps",), "all": ("props", "footsteps")}.get(kind, ("props",))
-        order = [t["name"] for t in snap["tracks"] if kinds.get(t["name"]) in want]
+        if kind == "sweep":
+            sw = set(st.get("sweep") or [])
+            order = [t["name"] for t in snap["tracks"] if t["name"] in sw]
+        else:
+            want = {"props": ("props",), "fts": ("footsteps",), "all": ("props", "footsteps")}.get(kind, ("props",))
+            order = [t["name"] for t in snap["tracks"] if kinds.get(t["name"]) in want]
         q = self.build(st, sweep=order)
         cur = st.get("cur", "")
         items = [{"key": i["key"], "name": i["name"], "clip": naming.strip_suffix(i.get("clip", "")) or i["track"],
@@ -2026,7 +2054,7 @@ def make_app(pt, rec=None):
 
     @routes.get("/api/artista")
     async def artista_data(req):
-        kind = req.query.get("kind", "props")
+        kind = req.query.get("kind", "sweep")
         try:     # «rec» se define más abajo en make_app; acá se usa recién cuando llega el pedido
             return web.json_response(await asyncio.get_running_loop().run_in_executor(None, rec.artist_view, kind))
         except SpotError as e:
@@ -2363,6 +2391,12 @@ def make_app(pt, rec=None):
 
     @routes.get("/api/rec/queue")
     async def rec_queue(_):
+        # Al parar de grabar, releer la sesión: los clips que muteaste pasan a «grabado» solos
+        if rec.snap:
+            try:
+                await asyncio.get_running_loop().run_in_executor(None, rec.refresh_if_stopped)
+            except SpotError:
+                pass
         return web.json_response(rec.build())
 
     @routes.post("/api/rec/choice")

@@ -53,7 +53,8 @@ La primera vez macOS va a preguntar si permite conexiones entrantes a Python: ac
 En el celular del artista: `http://<dirección de SpotPad>/artista` (el QR está en la página «Conectar iPad» y en Ajustes → Vista del artista). Es solo para mirar:
 - **Ahora**, en grande: el clip al que fue el grabador (Siguiente/Anterior, atajos o Seguir Pro Tools), y debajo el que viene después.
 - La lista de **props** (o **pasos**, o **todo**) por track: los pendientes primero; lo grabado o muteado aparece tachado y atenuado, y se puede ocultar.
-- Se actualiza sola cada pocos segundos. Relee la sesión como mucho cada dos minutos y nunca mientras Pro Tools graba o reproduce.
+- Por defecto muestra **lo que se graba**: los tracks que el grabador eligió barrer en Grabar, y solo lo pendiente. Un clip **muteado en Pro Tools cuenta como grabado**.
+- Se actualiza sola cada pocos segundos. Relee la sesión cuando Pro Tools para de grabar o reproducir (así los mutes nuevos aparecen enseguida) y si no, cada minuto; nunca mientras graba. Grabar en el iPad hace lo mismo.
 
 ## Herramientas de edición (prueba)
 Apagadas por defecto: se prenden en **Ajustes → Herramientas de edición**. Viven aparte del resto (sus propias rutas y atajos), así que apagadas no cambian nada.

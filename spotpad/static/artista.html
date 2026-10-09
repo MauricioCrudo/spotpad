@@ -98,14 +98,14 @@ main{padding:14px 16px 0;max-width:760px;margin:0 auto}
 <header>
   <div class="top"><span class="dot" id="dot"></span><b>Artista</b><span class="ses tc" id="ses">conectando…</span></div>
   <nav class="seg" id="seg">
-    <button data-k="props" class="sel">Props</button><button data-k="fts">Pasos</button><button data-k="all">Todo</button>
+    <button data-k="sweep" class="sel">Lo que se graba</button><button data-k="props">Props</button><button data-k="fts">Pasos</button>
   </nav>
 </header>
 <main>
   <section class="now idle" id="now"><div class="lbl">Ahora</div><div class="nm">Esperando al grabador…</div><div class="meta"></div></section>
   <div class="next" id="next"></div>
   <div class="stats" id="stats"></div>
-  <label class="tog"><input type="checkbox" id="hide"> Ocultar lo ya grabado</label>
+  <label class="tog"><input type="checkbox" id="hide"> Solo lo pendiente (lo muteado en Pro Tools cuenta como grabado)</label>
   <div id="list"></div>
   <p class="foot" id="foot"></p>
 </main>
@@ -115,7 +115,7 @@ const $ = s => document.querySelector(s);
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const store = {get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
-let kind = store.get('spotpad.artista.kind', 'props'), hide = store.get('spotpad.artista.hide', false), lastSig = '', lastCur = '';
+let kind = store.get('spotpad.artista.kind', 'sweep'), hide = store.get('spotpad.artista.hide', true), lastSig = '', lastCur = '';
 $('#hide').checked = hide;
 $('#hide').onchange = e => { hide = e.target.checked; store.set('spotpad.artista.hide', hide); lastSig = ''; load(); };
 document.querySelectorAll('#seg button').forEach(b => {
@@ -144,7 +144,7 @@ function render(d) {
   const pend = items.filter(i => !recorded(i)).length, tot = items.length;
   $('#stats').innerHTML = tot ? `<span>Pendientes <b style="color:var(--text)">${pend}</b> de ${tot}</span><span class="bar"><i style="width:${(tot - pend) / tot * 100}%"></i></span>` : '';
   const box = $('#list');
-  if (!tot) { box.innerHTML = `<div class="msg">${kind === 'fts' ? 'No hay pasos' : 'No hay props'} marcados en el spotting.</div>`; return; }
+  if (!tot) { box.innerHTML = `<div class="msg">${kind === 'sweep' ? 'El grabador todavía no eligió qué barrer.' : kind === 'fts' ? 'No hay pasos marcados en el spotting.' : 'No hay props marcados en el spotting.'}</div>`; return; }
   const by = new Map();
   items.forEach(i => { if (!by.has(i.track)) by.set(i.track, []); by.get(i.track).push(i); });
   let html = '';
@@ -157,7 +157,7 @@ function render(d) {
     for (const i of [...show.filter(i => !recorded(i)), ...show.filter(recorded)]) {
       html += `<div class="it${recorded(i) ? ' ok' : ''}${i.cur ? ' cur' : ''}" ${i.cur ? 'id="curItem"' : ''}>
         <div class="n">${esc(short(i.name))}${i.ref ? '<span class="ref">REF</span>' : ''}</div>
-        <div class="c">${recorded(i) ? (i.done ? 'grabado' : 'muteado') : esc(i.clip)}</div>
+        <div class="c">${recorded(i) ? 'grabado' : esc(i.clip)}</div>
         <div class="t tc">${esc(i.tc_in)}<small>${i.secs} s</small></div></div>`;
     }
   }

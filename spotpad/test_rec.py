@@ -142,3 +142,16 @@ assert v["now"]["name"] == "Prps Chair Drag" and any(i["done"] for i in v["items
 assert all(i["track"] != "Henry" for i in v["items"])                       # props: sin pasos
 assert any(i["track"] == "Henry" for i in ra.artist_view("fts")["items"])
 print("artista OK")
+
+# --- Artista: «lo que se graba» = lo que se barre; relee al parar Pro Tools (muteado = grabado) ---
+pb = MockProTools(); rb = RecController(pb)
+rb.set_state({"sweep": ["Henry"], "rec_track": "t3", "cur": "", "text_filter": "", "surface_filter": ""})
+v = rb.artist_view()
+assert {i["track"] for i in v["items"]} == {"Henry"} and any(i["muted"] for i in v["items"]), v["items"]
+calls = []
+orig = rb.refresh
+rb.refresh = lambda: (calls.append(1), orig())[1]
+pb.mock_transport = "TS_TransportRecording"; rb._tp_t = 0; rb.artist_view()
+pb.mock_transport = "TS_TransportStopped"; rb._tp_t = 0; rb.artist_view()
+assert calls == [1], calls                           # releyó una vez, justo al parar
+print("artista mute OK")
