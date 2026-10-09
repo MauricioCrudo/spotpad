@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.13.2"
+VERSION = "0.14.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -1607,7 +1607,40 @@ class RecController:
             return base
         snap["at"] = time.strftime("%H:%M:%S")
         self.snap = snap
+        self._snap_t = time.time()
         return self.build()
+
+    _snap_t = 0.0
+
+    def artist_view(self, kind="props", max_age=120):
+        """Vista del artista (solo lectura): todos los clips de props (o pasos) con su estado.
+        Usa la foto de la sesión; si tiene más de max_age segundos y Pro Tools está parado, la relee."""
+        if not self.snap or time.time() - self._snap_t > max_age:
+            try:
+                self.refresh()
+            except SpotError as e:
+                if not self.snap:
+                    return {"ok": False, "error": str(e), "items": []}
+        if not self.snap:
+            return {"ok": False, "error": "Pro Tools está grabando o reproduciendo: la lista aparece cuando pare",
+                    "items": []}
+        st, snap, rules = self.store(), self.snap, load_rules()
+        kinds = {t["name"]: naming.folder_kind(t["folder"], rules) for t in snap["tracks"]}
+        want = {"props": ("props",), "fts": ("footsteps",), "all": ("props", "footsteps")}.get(kind, ("props",))
+        order = [t["name"] for t in snap["tracks"] if kinds.get(t["name"]) in want]
+        q = self.build(st, sweep=order)
+        cur = st.get("cur", "")
+        items = [{"key": i["key"], "name": i["name"], "clip": naming.strip_suffix(i.get("clip", "")) or i["track"],
+                  "track": i["track"], "tc_in": i.get("tc_in", ""), "tc_out": i.get("tc_out", ""),
+                  "secs": round((i["end"] - i["start"]) / 48000, 1), "muted": i["muted"], "done": i["done"],
+                  "ref": i.get("ref", False), "cur": i["key"] == cur} for i in q["items"]]
+        now = next((i for i in items if i["cur"]), None)
+        if now is None and cur and self.follow_item and self.follow_item.get("key") == cur:
+            fi = self.follow_item
+            now = {"key": cur, "name": fi["name"], "clip": naming.strip_suffix(fi.get("clip", "")), "track": fi["track"],
+                   "tc_in": fi.get("tc_in", ""), "ref": fi.get("ref", False)}
+        return {"ok": True, "session": snap["session"], "at": snap["at"], "kind": kind, "tracks": order,
+                "now": now, "items": items}
 
     def build(self, st=None, sweep=None):
         st = st or self.store()
@@ -1984,10 +2017,27 @@ def make_app(pt, rec=None):
                             headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"})
 
     # Página para la Mac: QR + dirección para abrir SpotPad en el iPad
+    # Vista para el artista (celular, solo lectura)
+    @routes.get("/artista")
+    async def artista(_):
+        html = (RES / "static" / "artista.html").read_text("utf-8").replace("__SPOTPAD_VERSION__", VERSION)
+        return web.Response(text=html, content_type="text/html",
+                            headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+    @routes.get("/api/artista")
+    async def artista_data(req):
+        kind = req.query.get("kind", "props")
+        try:     # «rec» se define más abajo en make_app; acá se usa recién cuando llega el pedido
+            return web.json_response(await asyncio.get_running_loop().run_in_executor(None, rec.artist_view, kind))
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e), "items": []}, status=409)
+
     @routes.get("/conectar")
     async def conectar(req):
         url = ipad_url(req.app["port"])
-        return web.Response(content_type="text/html", text=CONNECT_PAGE.format(url=url, qr=qr_svg(url)))
+        aurl = url + "/artista"
+        return web.Response(content_type="text/html",
+                            text=CONNECT_PAGE.format(url=url, qr=qr_svg(url), aurl=aurl, aqr=qr_svg(aurl)))
 
     @routes.get("/api/status")
     async def status(_):
@@ -2508,6 +2558,8 @@ display:inline-block;width:300px}}.q svg{{width:100%;height:auto;display:block}}
 color:#E8A33D}}p{{color:#8d8c94;max-width:420px;margin:14px auto}}</style></head><body><div>
 <div class="q">{qr}</div><p>Escaneá con la cámara del iPad, o escribí en Safari:</p><code>{url}</code>
 <p>En Safari: Compartir → Agregar a inicio, para usarla a pantalla completa.<br>El iPad y esta computadora tienen que estar en la misma red.</p>
+<div style="margin-top:36px"><div class="q" style="width:200px">{aqr}</div>
+<p><b>Vista para el artista</b> (celular): las props pendientes y lo que se está grabando.</p><code style="font-size:16px">{aurl}</code></div>
 </div></body></html>"""
 
 

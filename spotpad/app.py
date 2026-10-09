@@ -83,7 +83,7 @@ def selftest(port):
     pt = MockProTools()
     stop = start_server(pt, port, RecController(pt))
     try:
-        for path in ("/api/status", "/api/layout", "/", "/conectar", "/api/health", "/api/report", "/api/update"):
+        for path in ("/api/status", "/api/layout", "/", "/conectar", "/api/health", "/api/report", "/api/update", "/artista", "/api/artista"):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
                 assert r.status == 200, (path, r.status)
         print(f"selftest OK · datos en {DATA}")

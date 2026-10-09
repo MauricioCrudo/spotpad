@@ -49,6 +49,12 @@ python3 bridge.py --debug  # loguea cada comando PTSL (útil si algo falla)
 Al arrancar muestra la dirección (p. ej. `http://192.168.0.20:8765`). Abrila en Safari del iPad → Compartir → **Agregar a inicio** para usarla a pantalla completa.
 La primera vez macOS va a preguntar si permite conexiones entrantes a Python: aceptá.
 
+## Vista para el artista
+En el celular del artista: `http://<dirección de SpotPad>/artista` (el QR está en la página «Conectar iPad» y en Ajustes → Vista del artista). Es solo para mirar:
+- **Ahora**, en grande: el clip al que fue el grabador (Siguiente/Anterior, atajos o Seguir Pro Tools), y debajo el que viene después.
+- La lista de **props** (o **pasos**, o **todo**) por track: los pendientes primero; lo grabado o muteado aparece tachado y atenuado, y se puede ocultar.
+- Se actualiza sola cada pocos segundos. Relee la sesión como mucho cada dos minutos y nunca mientras Pro Tools graba o reproduce.
+
 ## Herramientas de edición (prueba)
 Apagadas por defecto: se prenden en **Ajustes → Herramientas de edición**. Viven aparte del resto (sus propias rutas y atajos), así que apagadas no cambian nada.
 - **Consolidar (⌃⌥⌘K o botón en Grabar):** consolida la selección en el mismo track y le pone al clip nuevo, y a su archivo, el nombre del primer clip de la selección (sin «_03», «-01», «.L»). Si hay varios tracks seleccionados, lo hace en cada uno.

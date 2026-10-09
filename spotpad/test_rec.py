@@ -131,3 +131,14 @@ class PF(ProTools):
     def _selection_samples(s, e): return (10, 20)
 assert PF().follow_selection() == {"tracks": ["Chairs"], "in": 10, "out": 20}
 print("seguir selección OK")
+
+# --- Vista del artista: todos los props con su estado y el clip actual ---
+pa = MockProTools(); ra = RecController(pa)
+ra.set_state({"sweep": ["Chairs"], "rec_track": "t3", "cur": "", "text_filter": "", "surface_filter": ""})
+ra.refresh(); ra.step(1); ra.done_next()
+v = ra.artist_view("props")
+assert v["ok"] and {i["name"] for i in v["items"]} >= {"Prps Chair Sit", "Prps Chair Drag", "Prps Hands Surface Wood"}, v
+assert v["now"]["name"] == "Prps Chair Drag" and any(i["done"] for i in v["items"]), v["now"]
+assert all(i["track"] != "Henry" for i in v["items"])                       # props: sin pasos
+assert any(i["track"] == "Henry" for i in ra.artist_view("fts")["items"])
+print("artista OK")

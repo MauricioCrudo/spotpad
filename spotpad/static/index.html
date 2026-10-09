@@ -487,6 +487,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
   <div class="sbtns">
     <button class="hbtn" id="stRecon">Reconectar</button>
     <button class="hbtn" id="stReport">Informe para soporte</button>
+    <button class="hbtn" id="stArtist">Vista del artista</button>
   </div>
 </dialog>
 
@@ -724,6 +725,7 @@ $('#statClose').onclick = () => $('#stat').close();
 $('#reconBtn').onclick = reconnect;
 $('#stRecon').onclick = reconnect;
 $('#stReport').onclick = () => window.open('/api/report', '_blank');
+$('#stArtist').onclick = () => window.open('/conectar', '_blank');   // QR para abrirla en el celular del artista
 
 /* ---------- parte 1: botonera ---------- */
 // Pestañas: una por carpeta de la sesión (Surfaces, Footsteps, Props…) + las de presets.json
