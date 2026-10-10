@@ -64,7 +64,10 @@ jobs:
         run: SPOTPAD_DATA="$RUNNER_TEMP/sp" ./dist/SpotPad.exe --selftest
       - name: Empaquetar (Mac)
         if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent dist/SpotPad.app "${{ matrix.name }}.zip"
+        run: |
+          # zip: lo usa el actualizador de SpotPad · dmg: para instalar a mano (arrastrar a Aplicaciones)
+          ditto -c -k --keepParent dist/SpotPad.app "${{ matrix.name }}.zip"
+          bash ../.github/make_dmg.sh dist/SpotPad.app "SpotPad" "${{ matrix.name }}.dmg"
       - name: Empaquetar (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -72,7 +75,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: spotpad/${{ matrix.name }}.zip
+          path: |
+            spotpad/${{ matrix.name }}.zip
+            spotpad/${{ matrix.name }}.dmg
+          if-no-files-found: ignore
 
   # Modelo del analizador (SigLIP → ONNX). Se baja de Hugging Face y se exporta una sola vez;
   # queda en caché mientras no cambien las descripciones de superficies ni el exportador.
@@ -147,7 +153,9 @@ jobs:
         run: "\"./dist/SpotPad Analizador/SpotPad Analizador.exe\" --selftest"
       - name: Empaquetar (Mac)
         if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent "dist/SpotPad Analizador.app" "${{ matrix.name }}.zip"
+        run: |
+          ditto -c -k --keepParent "dist/SpotPad Analizador.app" "${{ matrix.name }}.zip"
+          bash ../.github/make_dmg.sh "dist/SpotPad Analizador.app" "SpotPad Analizador" "${{ matrix.name }}.dmg"
       - name: Empaquetar (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -155,7 +163,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: analizador/${{ matrix.name }}.zip
+          path: |
+            analizador/${{ matrix.name }}.zip
+            analizador/${{ matrix.name }}.dmg
+          if-no-files-found: ignore
 
   publicar:
     needs: [build, analizador]
@@ -181,9 +192,9 @@ jobs:
           VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' src/spotpad/bridge.py)
           echo "Versión $VER"
           gh release delete ultima --yes --cleanup-tag || true
-          gh release create ultima out/*.zip --prerelease --target "${{ github.sha }}" \
+          gh release create ultima out/*.zip out/*.dmg --prerelease --target "${{ github.sha }}" \
             --title "Última versión · SpotPad $VER" \
-            --notes "SpotPad $VER · compilado automáticamente desde ${GITHUB_SHA::7}. Bajá el zip de tu computadora, o actualizá desde SpotPad (ícono → Actualizar)."
+            --notes "SpotPad $VER · compilado automáticamente desde ${GITHUB_SHA::7}. Mac: bajá el .dmg de tu procesador y arrastrá SpotPad a Aplicaciones. Windows: el zip. Si ya lo tenés instalado, actualizá desde SpotPad (ícono → Actualizar); los .zip de Mac son para eso."
           # gh sube los zips a un borrador y después lo publica; si ese último paso falla, la
           # versión queda invisible. Publicarla de nuevo y verificar.
           for i in 1 2 3; do

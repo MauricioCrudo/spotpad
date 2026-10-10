@@ -30,7 +30,7 @@ from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
 
-VERSION = "0.14.2"
+VERSION = "0.15.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -2077,7 +2077,12 @@ def make_app(pt, rec=None):
         if st.get("connected") and st.get("session"):
             CURRENT["session"] = st["session"]
         last = EVENTS.items[-1] if EVENTS.items else None
-        return web.json_response({**st, "version": VERSION, "ev_seq": EVENTS.seq, "ev_last": last, "ev_status": EVENTS.status})
+        upd = None
+        if UPDATER is not None:          # sin red: solo lo que ya se sabe, para el aviso de la página
+            u = UPDATER.status()
+            upd = {k: u[k] for k in ("available", "latest", "state", "progress", "can_install")}
+        return web.json_response({**st, "version": VERSION, "ev_seq": EVENTS.seq, "ev_last": last,
+                                  "ev_status": EVENTS.status, "update": upd})
 
     @routes.get("/api/events")
     async def events(req):

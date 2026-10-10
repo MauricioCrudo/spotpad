@@ -49,8 +49,9 @@ def copy_to_clipboard(text):
         pass
 
 
-def make_icon(size=64):
-    """Ícono dibujado (no hace falta archivo): cuadrado ámbar con 4 pads."""
+def make_icon(size=64, badge=False):
+    """Ícono dibujado (no hace falta archivo): cuadrado ámbar con 4 pads.
+    badge=True agrega un punto (hay una actualización para instalar)."""
     from PIL import Image, ImageDraw
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -62,6 +63,11 @@ def make_icon(size=64):
         for j in range(2):
             x, y = pad + i * (cell + gap), pad + j * (cell + gap)
             d.rounded_rectangle([x, y, x + cell, y + cell], radius=max(2, cell // 5), fill=(18, 18, 20, 255))
+    if badge:
+        b = int(size * 0.46)
+        d.ellipse([size - b, 0, size - 1, b - 1], fill=(255, 255, 255, 255))
+        m = max(2, size // 22)
+        d.ellipse([size - b + m, m, size - 1 - m, b - 1 - m], fill=(225, 45, 60, 255))
     return img
 
 
@@ -182,6 +188,41 @@ def main():
             pass
     threading.Timer(8, after_check).start()
 
+    # Indicador en la barra de menú: punto en el ícono si hay versión nueva, avance al bajarla,
+    # y revisión cada 6 horas (además de la del arranque).
+    def watch_updates():
+        shown, last_check = None, time.time()
+        while True:
+            time.sleep(1)
+            try:
+                if time.time() - last_check > 6 * 3600 and upd.state == "idle":
+                    last_check = time.time()
+                    was = upd.available()
+                    upd.check()
+                    if upd.available() and not was:
+                        hk.notify("SpotPad", f"Hay una versión nueva ({upd.latest['version']}). "
+                                             "Ícono → Actualizar, o desde Ajustes en el iPad.", icon)
+                busy = upd.state in ("downloading", "installing")
+                want = (upd.available(), busy, round(upd.progress, 2) if busy else 0)
+                if want != shown:
+                    shown = want
+                    icon.icon = make_icon(badge=upd.available() or busy)
+                    icon.title = ("SpotPad · " + (f"bajando {int(upd.progress * 100)} %" if upd.state == "downloading"
+                                                  else "instalando…") if busy else
+                                  f"SpotPad · versión nueva: {upd.latest['version']}" if upd.available() else
+                                  "SpotPad" + (" · MOCK" if a.mock else ""))
+                    icon.update_menu()
+            except Exception:           # noqa: BLE001
+                pass
+    threading.Thread(target=watch_updates, daemon=True, name="upd-watch").start()
+
+    def upd_label(_):
+        if upd.state == "downloading":
+            return f"Bajando SpotPad {upd.latest['version']}… {int(upd.progress * 100)} %"
+        if upd.state == "installing":
+            return "Instalando… SpotPad se reinicia solo"
+        return f"⬆  Actualizar a SpotPad {upd.latest['version']}"
+
     def do_update(icon, _):
         if not upd.available():
             def work():
@@ -235,15 +276,15 @@ def main():
             threading.Timer(0.3, lambda: os._exit(0)).start()
 
     menu = Menu(
+        Item(upd_label, do_update, visible=lambda _: upd.available() or upd.state in ("downloading", "installing")),
         Item(lambda _: f"iPad: {ipad_url(a.port)}", lambda *_: webbrowser.open(local + "/conectar")),
         Item("Conectar iPad (QR)", lambda *_: webbrowser.open(local + "/conectar"), default=True),
         Item("Abrir SpotPad acá", lambda *_: webbrowser.open(local)),
         Menu.SEPARATOR,
         Item("Atajos de teclado", Menu(lambda: keys_items().items)),
         Item("Reconectar con Pro Tools", do_reconnect),
-        Item(lambda _: (f"Actualizar a {upd.latest['version']}" if upd.available() else
-                        ("Actualizando…" if upd.state in ("downloading", "installing") else "Buscar actualización")),
-             do_update),
+        Item(lambda _: "Buscando…" if upd.state == "checking" else "Buscar actualización", do_update,
+             visible=lambda _: not (upd.available() or upd.state in ("downloading", "installing"))),
         Item("Generar informe para soporte", make_report),
         Item("Ver registro", lambda *_: open_path(LOG_FILE)),
         Item("Carpeta de configuración", lambda *_: open_path(DATA)),

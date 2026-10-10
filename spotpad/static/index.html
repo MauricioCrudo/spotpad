@@ -59,6 +59,18 @@ header{display:flex;align-items:center;gap:10px;padding:12px 16px;flex:none}
   background:none;border:1px solid transparent;color:var(--dim);font-size:15px;font-weight:600}
 .icon:active{background:var(--press)}
 #gearBtn{font-size:19px}
+#gearBtn.upd{position:relative}
+#gearBtn.upd::after{content:"";position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;
+  background:var(--err);box-shadow:0 0 0 2px var(--bg)}
+/* Aviso de actualización (debajo del encabezado) */
+#updBar{display:flex;align-items:center;gap:10px;margin:8px 16px 6px;padding:8px 8px 8px 14px;border-radius:12px;
+  background:color-mix(in srgb,var(--accent) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));
+  position:relative;overflow:hidden;font-size:14px}
+#updBar[hidden],#updBar [hidden]{display:none}
+#updBar b{font-weight:650}
+#updBar .grow{flex:1;min-width:0}
+#updBar .hbtn{padding:7px 12px}
+#updProg{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--accent);transition:width .4s}
 #reconBtn{display:none;border-color:color-mix(in srgb,var(--err) 50%,var(--line));color:var(--err-text)}
 body.offline #reconBtn{display:inline-block}
 
@@ -368,6 +380,12 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
   <nav class="views"><button id="vPads" class="sel">Botonera</button><button id="vFolders">Carpetas</button><button id="vList">Lista<span class="badge" id="newCount"></span></button><button id="vRec">Grabar</button></nav>
   <button class="icon" id="gearBtn" title="Ajustes y temas" aria-label="Ajustes">⚙︎</button>
 </header>
+<div id="updBar" hidden role="status">
+  <span class="grow" id="updTxt"></span>
+  <button class="hbtn" id="updBarGo">Actualizar</button>
+  <button class="icon" id="updBarX" aria-label="Más tarde" title="Más tarde">✕</button>
+  <i id="updProg"></i>
+</div>
 
 <main id="viewPads">
   <section class="spot">
@@ -540,11 +558,54 @@ function toast(msg, err) {
 }
 function buzz(ok) { try { navigator.vibrate && navigator.vibrate(ok ? 15 : [40, 40, 40]); } catch {} }
 
+/* ---------- aviso de actualización ---------- */
+let updWas = '';
+function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch { return ''; } }
+function lsSet(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} }
+function showUpdate(u, offline) {
+  const bar = $('#updBar'), txt = $('#updTxt'), go = $('#updBarGo'), x = $('#updBarX'), prog = $('#updProg');
+  const busy = u && (u.state === 'downloading' || u.state === 'installing');
+  $('#gearBtn').classList.toggle('upd', !!(u && (u.available || busy)));
+  if (offline && updWas === 'installing') {          // la app se está reiniciando
+    bar.hidden = false; go.hidden = x.hidden = true; prog.style.width = '100%';
+    txt.innerHTML = '<b>Reiniciando SpotPad…</b> vuelve sola en unos segundos'; return;
+  }
+  if (!u) { bar.hidden = true; return; }
+  updWas = u.state;
+  if (busy) {
+    bar.hidden = false; go.hidden = x.hidden = true;
+    const pct = Math.round((u.progress || 0) * 100);
+    prog.style.width = (u.state === 'installing' ? 100 : pct) + '%';
+    txt.innerHTML = u.state === 'downloading' ? `<b>Bajando SpotPad ${esc2(u.latest)}</b> · ${pct} %` : '<b>Instalando…</b> SpotPad se reinicia sola';
+    lsSet('spUpdating', u.latest);
+    return;
+  }
+  if (u.available && lsGet('spUpdLater') !== u.latest) {
+    bar.hidden = false; go.hidden = !u.can_install; x.hidden = false; prog.style.width = '0';
+    txt.innerHTML = `<b>SpotPad ${esc2(u.latest)}</b> está disponible` + (u.can_install ? '' : ' · bajala de GitHub');
+    return;
+  }
+  bar.hidden = true;
+}
+$('#updBarGo').onclick = async () => {
+  try { const r = await api('/api/update/install', {method: 'POST'}); toast(r.msg || 'Actualizando'); }
+  catch (e) { toast(e.message, true); }
+  poll();
+};
+$('#updBarX').onclick = () => {   // «más tarde»: no vuelve a aparecer hasta la versión siguiente (queda el punto en ⚙︎)
+  const t = $('#updTxt').textContent.match(/SpotPad ([\d.]+)/); if (t) lsSet('spUpdLater', t[1]);
+  $('#updBar').hidden = true;
+};
+if (lsGet('spUpdating') && lsGet('spUpdating') === PAGE_VERSION) {
+  lsSet('spUpdating', ''); setTimeout(() => toast('SpotPad actualizada a ' + PAGE_VERSION), 600);
+}
+
 /* ---------- estado de conexión ---------- */
 async function poll() {
   try {
     const s = await api('/api/status');
     if (s.version && s.version !== PAGE_VERSION && !PAGE_VERSION.startsWith('__')) { location.reload(); return; }
+    showUpdate(s.update);
     $('#dot').className = 'dot ' + (s.connected ? 'on' : 'off');
     document.body.classList.toggle('offline', !s.connected);
     // Al conectarse con Pro Tools, traer las carpetas de la sesión
@@ -562,7 +623,7 @@ async function poll() {
       if (document.body.classList.contains('rec')) setTimeout(recEnter, 3000);
     }
     evStatus = s.ev_status || '';
-  } catch { $('#dot').className = 'dot off'; $('#session').textContent = 'sin conexión con la computadora'; document.body.classList.remove('offline'); }
+  } catch { showUpdate(null, true); $('#dot').className = 'dot off'; $('#session').textContent = 'sin conexión con la computadora'; document.body.classList.remove('offline'); }
 }
 
 /* ---------- diálogo genérico (nombre + color) ---------- */
