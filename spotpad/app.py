@@ -80,6 +80,8 @@ def selftest(port):
         bad = ck.register({b: (lambda: None) for b in hk.DEFAULTS["bindings"].values()})
         print(f"atajos macOS: {len(ck.refs)} registrados, fallaron: {bad}")
         ck.stop()
+        import UserNotifications, notifier      # noqa: F401  (avisos con nombre e ícono de SpotPad)
+        print("notificaciones nativas: OK")
     pt = MockProTools()
     stop = start_server(pt, port, RecController(pt))
     try:
@@ -101,6 +103,11 @@ def main():
     a, _ = ap.parse_known_args()     # macOS a veces agrega -psn_… al abrir la app
 
     setup_logging(a.debug)
+    try:
+        import notifier
+        notifier.setup()             # Mac: pide permiso de notificaciones una vez, con el nombre de SpotPad
+    except Exception:                # noqa: BLE001
+        pass
 
     if a.selftest:
         sys.exit(selftest(a.port))
@@ -143,7 +150,7 @@ def main():
             copy_to_clipboard(txt)
             open_path(f)
             try:
-                icon.notify("Informe listo (también copiado). Pegalo en la conversación con Claude.", "SpotPad")
+                hk.notify("SpotPad", "Informe listo (también copiado). Pegalo en la conversación con Claude.", icon)
             except Exception:           # noqa: BLE001
                 pass
         threading.Thread(target=work, daemon=True).start()
@@ -154,7 +161,7 @@ def main():
             msg = "Conectado con Pro Tools" if r.get("ok") else f"Sin conexión: {r.get('error', '?')}"
             log.info("Reconectar (menú): %s", msg)
             try:
-                icon.notify(msg, "SpotPad")
+                hk.notify("SpotPad", msg, icon)
             except Exception:           # noqa: BLE001
                 pass
         threading.Thread(target=work, daemon=True).start()

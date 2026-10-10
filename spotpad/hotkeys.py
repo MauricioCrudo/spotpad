@@ -252,13 +252,10 @@ def load(path) -> dict:
 
 
 def notify(title: str, msg: str, icon=None):
-    """Notificación del sistema (Mac: Centro de notificaciones; Windows: la del ícono)."""
+    """Notificación del sistema con el nombre y el ícono de SpotPad (ver notifier.py)."""
     try:
-        if sys.platform == "darwin":
-            esc = lambda t: str(t).replace("\\", "\\\\").replace('"', '\\"')
-            subprocess.Popen(["osascript", "-e", f'display notification "{esc(msg)}" with title "{esc(title)}"'])
-        elif icon is not None:
-            icon.notify(msg, title)
+        import notifier
+        notifier.notify(title, msg, icon)
     except Exception:                            # noqa: BLE001
         pass
 
