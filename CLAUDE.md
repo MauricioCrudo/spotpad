@@ -115,6 +115,13 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
 
 ## Pendientes conocidos
 
+- **Mejoras del CI (acordadas el 2026-10-14, hacer primero):**
+  1. Que una corrida nueva **no cancele a otra mientras publica** (`cancel-in-progress` cortó la 0.16.1 a mitad
+     de «publicar» y la release quedó con 8 de 10 archivos). Cancelar solo las compilaciones, nunca el paso publicar.
+  2. **No recompilar el Analizador si no cambió**: reusar sus .zip/.dmg de la release anterior (hoy «publicar» borra
+     y recrea la release con todo, por eso se recompila siempre). Baja una corrida de ~7 a ~3 min.
+  3. Comando para **compilar SpotPad Apple Silicon en la Mac** (M4) y probar la app real antes de publicar.
+     Publicar sigue siendo solo desde el CI: el actualizador necesita los 10 archivos con su nombre exacto.
 - Diseño a una mano para el celu (sugeridos según el track seleccionado, cambiar de categoría deslizando,
   «Igual que antes», pasos en dos toques, sin teclado) + varias categorías como columnas en iPad/compu. Propuesto, a confirmar.
 - Banco de prueba de EmbeddingGemma 2 vs SigLIP (imagen, video, audio) con un episodio spoteado a mano. Falta saber
