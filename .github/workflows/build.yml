@@ -193,13 +193,13 @@ jobs:
           VER=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' src/spotpad/bridge.py)
           echo "Versión $VER"
           gh release delete ultima --yes --cleanup-tag || true
-          gh release create ultima out/*.zip out/*.dmg --prerelease --target "${{ github.sha }}" \
+          gh release create ultima out/*.zip out/*.dmg --latest --target "${{ github.sha }}" \
             --title "Última versión · SpotPad $VER" \
             --notes "SpotPad $VER · compilado automáticamente desde ${GITHUB_SHA::7}. Mac: bajá el .dmg de tu procesador y arrastrá SpotPad a Aplicaciones. Windows: el zip. Si ya lo tenés instalado, actualizá desde SpotPad (ícono → Actualizar); los .zip de Mac son para eso."
           # gh sube los zips a un borrador y después lo publica; si ese último paso falla, la
           # versión queda invisible. Publicarla de nuevo y verificar.
           for i in 1 2 3; do
-            gh release edit ultima --draft=false --prerelease && break
+            gh release edit ultima --draft=false --prerelease=false --latest && break
             sleep 5
           done
           test "$(gh release view ultima --json isDraft -q .isDraft)" = "false"

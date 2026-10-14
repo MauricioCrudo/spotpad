@@ -57,7 +57,7 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
 ## Versiones y releases
 
 - Subir `VERSION` en `spotpad/bridge.py` en cada cambio que se publique (semver: 0.x.y).
-- Push a `main` → GitHub Actions compila y reemplaza la release **«ultima»** (prerelease) con título
+- Push a `main` → GitHub Actions compila y reemplaza la release **«ultima»** (release normal, marcada como «Latest», así se ve en el repo) con título
   «Última versión · SpotPad X.Y.Z». El actualizador lee la versión de las notas («SpotPad X.Y.Z»).
 - Assets: `SpotPad-Mac-AppleSilicon.zip/.dmg`, `SpotPad-Mac-Intel.zip/.dmg`, `SpotPad-Windows.zip`,
   y los del Analizador. **No renombrar los .zip**: el actualizador los busca por nombre exacto.
