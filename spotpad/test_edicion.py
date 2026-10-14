@@ -52,7 +52,7 @@ class PT(ProTools):
 
 def tools(eng, **cfg):
     t = EditTools(PT(eng), lambda: {"enabled": True, **cfg})
-    t._edl = lambda e: eng.edl
+    t._edl = lambda e, **k: eng.edl
     return t
 
 # Consolidar: ⌥⇧3 en Pro Tools (no ConsolidateClip del SDK, que deja un tono), un track por vez,
@@ -65,7 +65,7 @@ def con_teclas(t, eng, falla=()):
         evs = eng.edl.get(tr, [])
         eng.edl[tr] = [ev for ev in evs if ev.end <= 100 or ev.start >= 200] + [EdlEvent(tr, tr + "_01", 100, 200)]
         eng.consolidados = getattr(eng, "consolidados", []) + [tr]
-    t.teclas, t.espera = teclas, 0
+    t.teclas, t.espera, t.limite = teclas, 0, 0.3
     run0 = eng.client.run
     def run(op):
         run0(op)
