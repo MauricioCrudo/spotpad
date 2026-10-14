@@ -31,7 +31,7 @@ import naming
 import ai_import
 import proyecto
 
-VERSION = "0.16.0"
+VERSION = "0.16.1"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))

@@ -83,7 +83,7 @@ body.offline #reconBtn{display:inline-block}
 
 /* ===== Paneles ===== */
 main,#viewList,#viewRec{flex:1;min-height:0;padding:0 16px calc(16px + var(--tab-h) + env(safe-area-inset-bottom))}
-main{display:grid;grid-template-columns:1.65fr 1fr;gap:14px}
+main{display:grid;grid-template-columns:1fr;gap:14px}
 section{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;min-height:0;box-shadow:var(--shadow)}
 h2{margin:0 0 12px;font-size:15px;font-weight:650;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:8px}
 h2 b{color:var(--accent);font-weight:600}
@@ -164,21 +164,6 @@ body.editing .fbar,.fbar.always{display:flex}
 #refBtn{flex:1.3;letter-spacing:.06em;font-weight:750;font-size:16px}
 #refBtn.on{background:var(--accent);color:var(--on-accent);border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 25%,transparent)}
 
-/* Renombrar track (panel derecho) */
-.peek{border:1px dashed var(--line2);border-radius:var(--r);padding:12px;margin-bottom:12px}
-.peek .lbl{font-size:12px;color:var(--dim)}
-.peek .name{font-size:18px;font-weight:650;margin-top:4px;min-height:22px}
-.peek .src{font-size:12px;color:var(--dim)}
-.targets{display:flex;flex-direction:column;gap:8px;overflow:auto;flex:1}
-.tgt{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--raised);border-radius:var(--r);
-  padding:14px;text-align:left;min-height:60px;box-shadow:var(--shadow)}
-.tgt:active{background:var(--press)}
-.tgt .n{font-size:12px;font-weight:700;color:var(--on-accent);background:var(--accent);border-radius:6px;padding:3px 7px;font-variant-numeric:tabular-nums}
-.tgt .t{font-size:16px;font-weight:620;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tgt .arrow{color:var(--dim);font-size:13px}
-.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:12px}
-.seg button{flex:1;border:0;background:none;color:var(--dim);font-weight:650;font-size:16px;padding:11px;border-radius:9px}
-.seg button.sel{background:var(--accent);color:var(--on-accent)}
 
 /* ===== Diálogos ===== */
 dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:var(--r-lg);padding:0;
@@ -456,17 +441,6 @@ body.caras #viewCaras{display:flex}
       <button id="undo" title="Deshacer en Pro Tools">Deshacer</button>
     </div>
   </section>
-
-  <section>
-    <h2><span>Renombrar track con el clip</span><button class="hbtn" id="edit">Elegir tracks</button></h2>
-    <div class="seg" id="seg"></div>
-    <div class="peek" id="peek">
-      <div class="lbl">Clip seleccionado en Pro Tools (tocá para leerlo)</div>
-      <div class="name" id="peekName">—</div>
-      <div class="src mono" id="peekSrc"></div>
-    </div>
-    <div class="targets" id="targets"></div>
-  </section>
 </main>
 
 <div id="viewList">
@@ -538,6 +512,7 @@ body.caras #viewCaras{display:flex}
       <button id="recDone" class="done">Grabado</button>
       <button id="recNext" class="next">Siguiente</button>
     </div>
+    <button class="hbtn" id="recSel" style="min-height:52px;margin-top:8px">Clip seleccionado en Pro Tools → track de grabación</button>
     <div class="queue" id="recQueue"></div>
   </section>
 </div>
@@ -622,7 +597,7 @@ function renderThemes() {
 applyTheme(themeChoice());
 if (window.matchMedia) matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme(themeChoice()));   // la pone el servidor; si SpotPad se actualiza, la página se recarga sola
 const $ = s => document.querySelector(s);
-let presets = [], presetData = {todas: [], generica: [], botonera: {categorias: [], agregados: {}, ocultas: [], ocultos: {}}, proyecto: ''}, catIdx = 0, tracks = [], targets = [], prefix = '', prefixOpts = [], lastClip = '';
+let presets = [], presetData = {todas: [], generica: [], botonera: {categorias: [], agregados: {}, ocultas: [], ocultos: {}}, proyecto: ''}, catIdx = 0, tracks = [];
 
 async function api(path, opts = {}) {
   const r = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...opts});
@@ -1546,47 +1521,8 @@ function renderXfer() {
   });
 }
 
-/* ---------- parte 2: tracks destino ---------- */
+/* ---------- elegir tracks (lista de spotting) ---------- */
 async function loadTracks() { tracks = await api('/api/tracks').catch(e => { toast(e.message, true); return []; }); }
-async function loadTargets() { targets = await api('/api/targets').catch(() => []); }
-
-function renderTargets() {
-  const box = $('#targets'); box.innerHTML = '';
-  if (!targets.length) { box.innerHTML = '<div class="empty">Elegí los tracks que vas a renombrar con «Elegir tracks».</div>'; return; }
-  targets.forEach((id, i) => {
-    const t = tracks.find(t => t.id === id);
-    const b = document.createElement('button'); b.className = 'tgt';
-    b.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span><span class="arrow">← clip</span>`;
-    b.querySelector('.t').textContent = t ? t.name : '(track borrado)';
-    b.onclick = async () => {
-      try { const r = await api('/api/rename/' + encodeURIComponent(id), {method: 'POST'});
-            flash(b, true); toast(r.msg); await loadTracks(); renderTargets(); }
-      catch (e) { flash(b, false); toast(e.message, true); }
-    };
-    box.append(b);
-  });
-}
-
-/* prefijo Prps / Fts */
-const withPrefix = c => !prefix || c.toLowerCase().startsWith(prefix.toLowerCase() + ' ') ? c : prefix + ' ' + c;
-function renderSeg() {
-  const seg = $('#seg'); seg.innerHTML = '';
-  prefixOpts.forEach(p => {
-    const b = document.createElement('button'); b.textContent = p; b.className = p === prefix ? 'sel' : '';
-    b.onclick = async () => {
-      try { const r = await api('/api/prefix', {method: 'PUT', body: JSON.stringify({prefix: p})});
-            prefix = r.prefix; renderSeg(); renderPeek(); buzz(true); }
-      catch (e) { toast(e.message, true); }
-    };
-    seg.append(b);
-  });
-}
-function renderPeek() { $('#peekName').textContent = lastClip ? withPrefix(lastClip) : '—'; }
-
-$('#peek').onclick = async () => {
-  try { const r = await api('/api/peek'); lastClip = r.clip; renderPeek(); $('#peekSrc').textContent = 'clip «' + r.clip + '» en ' + r.track; buzz(true); }
-  catch (e) { lastClip = ''; renderPeek(); $('#peekSrc').textContent = ''; toast(e.message, true); }
-};
 
 let pick = null;   // {ids, save}
 async function openPicker(title, ids, save) {
@@ -1606,8 +1542,6 @@ async function openPicker(title, ids, save) {
   });
   $('#dlg').showModal();
 }
-$('#edit').onclick = () => openPicker('Tracks destino', targets, async ids => {
-  await api('/api/targets', {method: 'PUT', body: JSON.stringify(ids)}); renderTargets(); });
 $('#done').onclick = async () => {
   await pick.save(pick.ids).catch(e => toast(e.message, true));
   $('#dlg').close();
@@ -1896,6 +1830,13 @@ function recStep(dir) {
 $('#recPrev').onclick = () => recStep(-1);
 $('#recNext').onclick = () => recStep(1);
 $('#recGo').onclick = () => recGo(recItem());
+$('#recSel').onclick = async () => {
+  const b = $('#recSel'); b.disabled = true;
+  try { const r = await api('/api/rec/from-selection', {method: 'POST'}); if (r.cur) recCur = r.cur;
+        toast(r.msg || 'Listo'); buzz(true); recSig = ''; await recPoll(); }
+  catch (e) { toast(e.message, true); }
+  b.disabled = false;
+};
 $('#recDone').onclick = async () => {
   const it = recItem(); if (!it) return;
   try { const r = await api('/api/rec/done', {method: 'POST', body: JSON.stringify({key: it.key, done: !it.done})});
@@ -1930,8 +1871,6 @@ $('#rrClose').onclick = () => { $('#recRules').close(); recRender(); };
   poll(); setInterval(poll, 4000);
   renderRecents(); await loadHidden(); await loadLayout(true);
   if (['rec', 'folders', 'caras'].includes(ls.get('spotpad.view', 'pads'))) setView(ls.get('spotpad.view'));
-  const pr = await api('/api/prefix'); prefix = pr.prefix; prefixOpts = pr.options; renderSeg();
-  await Promise.all([loadTracks(), loadTargets()]); renderTargets();
 })();
 </script>
 </body>

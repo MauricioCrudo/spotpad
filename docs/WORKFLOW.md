@@ -70,7 +70,7 @@ Algunos clips se marcan como **REF** (mayúsculas, al final del nombre). REF nun
 | Spotting / grabación | Todos | **Caras** (iPad), **/carimetro** (impreso), **/artista → Caras** | Carímetro del proyecto: foto, actor, calzado de siempre. La cara aparece en los botones de Pasos y en la vista del artista. |
 | Entre compus | Supervisor | Ajustes → **Llevar a otra computadora** | Exportar/importar el proyecto (caras, botonera del proyecto, nombres, calzados) y la configuración genérica en archivos `.spotpad`. |
 | Spotting | Analizador (app aparte) | Compu | Analiza el video localmente, marca cambios de escena y superficies en la sesión; las dudas van a un track «IA Dudas» inactivo. |
-| Grabación | Grabador | Atajo **⌃⌥⌘R** o iPad | Renombra el track de grabación con el clip seleccionado (`Prps`/`Fts` + nombre limpio). |
+| Grabación | Grabador | Atajo **⌃⌥⌘R** o iPad **Grabar → Clip seleccionado** | Renombra el track de grabación con el clip seleccionado (`Prps`/`Fts` + nombre limpio). |
 | Grabación | Grabador | **⌃⌥⌘N / ⌃⌥⌘B**, iPad **Grabar** | Siguiente / anterior pendiente: selecciona el track y el rango del clip, renombra el track de grabación y opcionalmente mueve la vista. Saltea lo muteado. **⌃⌥⌘G** marca grabado y pasa al siguiente. |
 | Grabación | Grabador | iPad **Grabar → Qué barrer** | Elige qué tracks recorre; filtro por texto. |
 | Grabación | Artista | Celu, **/artista** | Ve «Ahora» y «Después», solo lo pendiente de los tracks que se barren. Se actualiza cuando Pro Tools para. |
