@@ -66,6 +66,9 @@ Algunos clips se marcan como **REF** (mayúsculas, al final del nombre). REF nun
 |---|---|---|---|
 | Spotting | Supervisor | iPad, **Botonera** | Marcar región en Pro Tools → tocar un botón → crea el clip group con ese nombre (GroupClips + RenameSelectedClip). Categorías: Superficies, Pasos, Props, categorías preseteadas, ★ Proyecto. Botón REF. |
 | Spotting | Supervisor | iPad, **Carpetas** | Ver y usar los tracks por carpeta de la sesión. |
+| Spotting | Supervisor | iPad, **Botonera → Pasos** | Tocar el personaje (queda elegido) y el calzado: el clip va al track del personaje («Henry», «Henry Sneakers») o, si no tiene track, al del calzado con su nombre («Sonia»). |
+| Spotting / grabación | Todos | **Caras** (iPad), **/carimetro** (impreso), **/artista → Caras** | Carímetro del proyecto: foto, actor, calzado de siempre. La cara aparece en los botones de Pasos y en la vista del artista. |
+| Entre compus | Supervisor | Ajustes → **Llevar a otra computadora** | Exportar/importar el proyecto (caras, botonera del proyecto, nombres, calzados) y la configuración genérica en archivos `.spotpad`. |
 | Spotting | Analizador (app aparte) | Compu | Analiza el video localmente, marca cambios de escena y superficies en la sesión; las dudas van a un track «IA Dudas» inactivo. |
 | Grabación | Grabador | Atajo **⌃⌥⌘R** o iPad | Renombra el track de grabación con el clip seleccionado (`Prps`/`Fts` + nombre limpio). |
 | Grabación | Grabador | **⌃⌥⌘N / ⌃⌥⌘B**, iPad **Grabar** | Siguiente / anterior pendiente: selecciona el track y el rango del clip, renombra el track de grabación y opcionalmente mueve la vista. Saltea lo muteado. **⌃⌥⌘G** marca grabado y pasa al siguiente. |
@@ -75,6 +78,9 @@ Algunos clips se marcan como **REF** (mayúsculas, al final del nombre). REF nun
 
 Nombres: Title Case por palabra, se corta lo que sigue a un «.» (`.grp.01`, `-01.L`), prefijo `Prps`/`Fts`.
 Las categorías de props preseteadas van siempre con `Prps` y el nombre del ítem tal cual, sin la categoría.
+
+La botonera tiene una parte **genérica** (para todos los proyectos) y una del **proyecto** (botones y categorías
+propias, y lo de la genérica que no se usa en ese proyecto, oculto).
 
 ## Restricciones que mandan
 

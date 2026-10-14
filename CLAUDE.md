@@ -20,9 +20,13 @@ spotpad/            App principal (bridge Python + web)
   naming.py         Nombres: prefijo Prps/Fts, Title Case por palabra, se corta todo lo que sigue a un «.», REF.
   edl.py, tc.py     Parseo del texto de ExportSessionInfoAsText (clips, mutes, tiempos).
   ai_import.py      Recibe marcas del analizador (/api/ai/*).
+  proyecto.py       Lo de cada proyecto: personajes con cara (carímetro), botonera propia sobre la genérica,
+                    calzado fijo por personaje, destino de un paso (personaje + calzado → track) y el archivo
+                    .spotpad para exportar/importar. Sin Pro Tools: se testea solo (test_personajes.py).
   presets.json      Categorías de props por defecto (12) y superficies/pasos.
   static/index.html Interfaz del iPad/celu/compu (una sola página, sin build). Temas por [data-theme].
-  static/artista.html Vista del artista (celu): lo pendiente de grabar.
+  static/artista.html Vista del artista (celu): lo pendiente de grabar, con la cara del personaje; pestaña Caras.
+  static/carimetro.html Carímetro para imprimir (A4, /carimetro).
   test_*.py         Tests sin Pro Tools (scripts simples: `python test_x.py`).
   spotpad.spec      PyInstaller (Mac .app / Windows .exe).
 analizador/         App aparte: analiza el video (SigLIP ONNX), marca escenas y superficies en la sesión vía SpotPad.
@@ -82,6 +86,24 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
 - Tracks inactivos se ignoran pero se listan en «Inactivos». La pista de dudas de la IA es «IA Dudas», inactiva.
 - Carpetas se detectan aunque estén anidadas; la botonera muestra categorías, las carpetas van en su vista.
 
+## Proyecto vs. genérica
+
+- La **genérica** es la configuración de la compu: `presets.json` (botonera base), `footsteps.json`, `hidden.json`,
+  `hotkeys.json`, `settings.json`. Cambiarla afecta a todos los proyectos.
+- El **proyecto** sale del nombre de la sesión (`default_project`, cambiable a mano) y vive en
+  `<datos>/proyectos/<nombre>/proyecto.json` + `caras/`. Los nombres escritos a mano siguen en `proyectos.json`.
+  - Botonera = genérica + `agregados` (botones propios en categorías genéricas) + `categorias` propias
+    (id `p-…`) − `ocultas`/`ocultos`. `combinar()` arma la vista; `/api/presets` devuelve `categories`
+    (lo visible), `todas` (con marcas) y `generica` (cruda). En Editar se elige qué se toca: Genérica o ★ Proyecto.
+  - Personajes: solo principales llevan cara. El calzado fijo (`char_shoes`) es del proyecto y pisa al global
+    de `footsteps.json`, que queda de respaldo para lo viejo (`load_rules`).
+  - Pasos en dos toques (`/api/fts/group`): principal con track → su track, clip «Henry» o «Henry Sneakers» si
+    cambia de calzado; sin track → el track de ese calzado con el nombre del personaje como clip.
+- **Exportar/importar** (Ajustes → Llevar a otra computadora): `.spotpad` = zip. Proyecto: mezclar (lo local
+  gana) o reemplazar. Genérica: reemplaza y deja la anterior en `<datos>/respaldo-<fecha>/`; los atajos no se
+  traen entre Mac y Windows. Al leer se aceptan solo nombres conocidos (sin rutas raras) y tamaño acotado.
+- Las fotos se achican en el navegador (640 px, JPEG) antes de subir: el bridge no depende de Pillow.
+
 ## Forma de trabajo con el usuario
 
 - Si pide «pensemos antes» o «proponeme», proponer y esperar confirmación antes de implementar.
@@ -97,4 +119,4 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
   si el video trae sonido directo.
 - Voz para elegir nombres: buscar una opción mejor que el atajo de iOS (se postergó).
 - Traductor español→inglés de nombres (glosario + Opus-MT): el usuario pidió no implementarlo todavía.
-- Sin probar en el Pro Tools real: consolidar/regrabar, vista del artista con mutes, notificaciones nativas, indicador de actualización.
+- Sin probar en el Pro Tools real: personajes/caras y pasos por personaje + calzado (0.16.0), consolidar/regrabar, vista del artista con mutes, notificaciones nativas, indicador de actualización.

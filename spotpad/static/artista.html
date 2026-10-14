@@ -82,6 +82,21 @@ main{padding:14px 16px 0;max-width:760px;margin:0 auto}
 .it.ok .n::before{content:"✓ ";color:var(--ok);text-decoration:none;display:inline-block;margin-right:2px}
 .ref{display:inline-block;margin-left:8px;font-size:11px;font-weight:750;letter-spacing:.06em;color:var(--on-accent);
   background:var(--accent);border-radius:5px;padding:2px 6px;vertical-align:3px}
+/* Caras de los personajes */
+.now.hasface{display:grid;grid-template-columns:1fr auto;gap:0 16px;align-items:center}
+.now .pic{grid-row:1 / span 3;grid-column:2;width:clamp(84px,24vw,140px);aspect-ratio:3/4;border-radius:14px;object-fit:cover;background:var(--raised)}
+.it.hasface{grid-template-columns:auto 1fr auto}
+.it .f{grid-row:1 / span 2;width:40px;height:40px;border-radius:50%;object-fit:cover;background:var(--raised)}
+.it.hasface .n,.it.hasface .c{grid-column:2}
+.it.hasface .t{grid-column:3}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.cc{border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.cc .ph{aspect-ratio:3/4;background:var(--raised);display:grid;place-items:center;color:var(--faint);font-size:36px;font-weight:700}
+.cc .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.cc .in{padding:8px 10px 10px}
+.cc .nm{font-size:18px;font-weight:700;line-height:1.15}
+.cc .sh{font-size:13px;color:var(--dim)}
+body.caras .now,body.caras .next,body.caras .stats,body.caras .tog,body.caras #foot{display:none}
 .msg{color:var(--dim);padding:28px 4px;text-align:center;line-height:1.5}
 .foot{color:var(--faint);font-size:12px;text-align:center;margin:20px 0 0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -98,7 +113,7 @@ main{padding:14px 16px 0;max-width:760px;margin:0 auto}
 <header>
   <div class="top"><span class="dot" id="dot"></span><b>Artista</b><span class="ses tc" id="ses">conectando…</span></div>
   <nav class="seg" id="seg">
-    <button data-k="sweep" class="sel">Lo que se graba</button><button data-k="props">Props</button><button data-k="fts">Pasos</button>
+    <button data-k="sweep" class="sel">Lo que se graba</button><button data-k="props">Props</button><button data-k="fts">Pasos</button><button data-k="caras">Caras</button>
   </nav>
 </header>
 <main>
@@ -121,17 +136,34 @@ $('#hide').onchange = e => { hide = e.target.checked; store.set('spotpad.artista
 document.querySelectorAll('#seg button').forEach(b => {
   b.classList.toggle('sel', b.dataset.k === kind);
   b.onclick = () => { kind = b.dataset.k; store.set('spotpad.artista.kind', kind);
-    document.querySelectorAll('#seg button').forEach(x => x.classList.toggle('sel', x === b)); lastSig = ''; load(); };
+    document.querySelectorAll('#seg button').forEach(x => x.classList.toggle('sel', x === b)); lastSig = '';
+    if (kind === 'caras') loadCaras(); else load(); };
 });
 const recorded = i => i.done || i.muted;
+const cara = c => c ? `/api/cara/${encodeURIComponent(c.id)}?v=${c.v || 0}` : '';
+const ini = n => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+
+// Pestaña Caras: el carímetro del proyecto (se lee una vez al entrar, no en cada vuelta)
+async function loadCaras() {
+  document.body.classList.add('caras');
+  $('#list').innerHTML = '<div class="msg">Leyendo…</div>';
+  try {
+    const d = await (await fetch('/api/personajes', {cache: 'no-store'})).json();
+    const ps = (d.personajes || []).filter(p => p.id);
+    $('#list').innerHTML = ps.length ? '<div class="cgrid">' + ps.map(p => `<div class="cc"><div class="ph">${p.cara
+        ? `<img alt="" src="/api/cara/${encodeURIComponent(p.id)}?v=${p.cara_v || 0}">` : esc(ini(p.nombre))}</div>
+      <div class="in"><div class="nm">${esc(p.nombre)}</div>${p.calzado ? `<div class="sh">${esc(p.calzado)}</div>` : ''}</div></div>`).join('') + '</div>'
+      : '<div class="msg">Todavía no hay caras cargadas en este proyecto.</div>';
+  } catch { $('#list').innerHTML = '<div class="msg">Sin conexión con la computadora.</div>'; }
+}
 const short = n => String(n || '').replace(/^(Prps|Fts)\s+/i, '');   // el prefijo es para Pro Tools, no para el artista
 
 function render(d) {
   const items = d.items || [];
   const now = d.now, nb = $('#now');
   if (now) {
-    nb.className = 'now';
-    nb.innerHTML = `<div class="lbl">Ahora</div><div class="nm">${esc(short(now.name))}${now.ref ? '<span class="ref">REF</span>' : ''}</div>
+    nb.className = 'now' + (now.cara ? ' hasface' : '');
+    nb.innerHTML = (now.cara ? `<img class="pic" alt="" src="${cara(now.cara)}">` : '') + `<div class="lbl">Ahora</div><div class="nm">${esc(short(now.name))}${now.ref ? '<span class="ref">REF</span>' : ''}</div>
       <div class="meta"><span class="tc">${esc(now.tc_in)}</span> · ${esc(now.track)}${now.clip && now.clip !== now.track ? ' · clip «' + esc(now.clip) + '»' : ''}</div>`;
   } else {
     nb.className = 'now idle';
@@ -155,8 +187,8 @@ function render(d) {
     html += `<div class="grp"><span>${esc(track)}</span><span>${p ? p + ' pendiente' + (p > 1 ? 's' : '') : 'listo'}</span></div>`;
     // Pendientes primero, después lo grabado (atenuado y tachado)
     for (const i of [...show.filter(i => !recorded(i)), ...show.filter(recorded)]) {
-      html += `<div class="it${recorded(i) ? ' ok' : ''}${i.cur ? ' cur' : ''}" ${i.cur ? 'id="curItem"' : ''}>
-        <div class="n">${esc(short(i.name))}${i.ref ? '<span class="ref">REF</span>' : ''}</div>
+      html += `<div class="it${recorded(i) ? ' ok' : ''}${i.cur ? ' cur' : ''}${i.cara ? ' hasface' : ''}" ${i.cur ? 'id="curItem"' : ''}>
+        ${i.cara ? `<img class="f" alt="" src="${cara(i.cara)}">` : ''}<div class="n">${esc(short(i.name))}${i.ref ? '<span class="ref">REF</span>' : ''}</div>
         <div class="c">${recorded(i) ? 'grabado' : esc(i.clip)}</div>
         <div class="t tc">${esc(i.tc_in)}<small>${i.secs} s</small></div></div>`;
     }
@@ -170,6 +202,8 @@ function render(d) {
 }
 
 async function load() {
+  if (kind === 'caras') return;
+  document.body.classList.remove('caras');
   try {
     const r = await fetch('/api/artista?kind=' + kind, {cache: 'no-store'});
     const d = await r.json();
@@ -186,7 +220,8 @@ async function checkVersion() {
   try { const s = await (await fetch('/api/health', {cache: 'no-store'})).json();
         if (s.version && s.version !== PAGE_VERSION && !PAGE_VERSION.startsWith('__')) location.reload(); } catch {}
 }
-load(); setInterval(() => { if (document.visibilityState === 'visible') load(); }, 3000);
+if (kind === 'caras') loadCaras(); else load();
+setInterval(() => { if (document.visibilityState === 'visible') load(); }, 3000);
 setInterval(checkVersion, 30000);
 </script>
 </body>

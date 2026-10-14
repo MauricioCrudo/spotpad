@@ -29,8 +29,9 @@ from edl import clip_at_selection, parse_session_text
 from tc import TcConverter, rate_from_enum
 import naming
 import ai_import
+import proyecto
 
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -64,6 +65,7 @@ DIAG_FILE = DATA / "diag.txt"
 HIDDEN_FILE = DATA / "hidden.json"      # carpetas y tracks ocultos en la botonera (por nombre)
 RULES_FILE = DATA / "footsteps.json"    # reglas de nombres de pasos (calzados, colores, alias de superficies)
 PROJECTS_FILE = DATA / "proyectos.json"  # nombres escritos a mano, por proyecto y track
+PROJECTS_DIR = DATA / "proyectos"        # por proyecto: personajes (caras), botonera propia, calzados
 SETTINGS_FILE = DATA / "settings.json"  # funciones en segundo plano (avisos de Pro Tools)
 REC_FILE = DATA / "rec.json"            # modo grabación: track de grabación, qué barrer, elecciones por sesión
 
@@ -78,7 +80,28 @@ def load_rules() -> dict:
             r[k] = {**r[k], **v}
         else:
             r[k] = v
+    proj = proyecto_actual()
+    if proj:      # el calzado fijo de un personaje es del proyecto (el global queda de respaldo)
+        r["char_shoes"] = {**r.get("char_shoes", {}), **STORE.load(proj).get("char_shoes", {})}
     return r
+
+
+def proyecto_actual() -> str:
+    """Proyecto de la sesión abierta ("" si no hay sesión)."""
+    try:
+        return PROJECTS.project_for(CURRENT["session"]) if CURRENT["session"] else ""
+    except NameError:          # al importar el módulo, antes de que existan
+        return ""
+
+
+def presets_proyecto(proj=None) -> dict:
+    """Genérica + lo del proyecto. «categories» = lo que se ve al spotear; «todas» = con lo oculto marcado."""
+    data = load_json(PRESETS_FILE, {"categories": []})
+    proj = proyecto_actual() if proj is None else proj
+    bot = STORE.load(proj)["botonera"] if proj else {}
+    todas = proyecto.combinar(data.get("categories", []), bot)
+    return {**data, "categories": proyecto.visibles(todas), "todas": todas,
+            "generica": data.get("categories", []), "botonera": bot, "proyecto": proj}
 
 
 def top_folders(infos, rules=None) -> dict:
@@ -239,7 +262,7 @@ def preset_prop(clip: str) -> bool:
     want = tidy(clip).lower()
     if not want:
         return False
-    for c in load_json(PRESETS_FILE, {}).get("categories", []):
+    for c in presets_proyecto()["categories"]:
         if any(tidy(item_name(i)).lower() == want for i in c.get("items", [])):
             return True
     return False
@@ -1658,15 +1681,20 @@ class RecController:
             order = [t["name"] for t in snap["tracks"] if kinds.get(t["name"]) in want]
         q = self.build(st, sweep=order)
         cur = st.get("cur", "")
+        proj = proyecto_actual()
+        pd = STORE.load(proj) if proj else {}
+        cara = lambda i: proyecto.cara_de(pd, i.get("character")) if pd and i.get("character") else None
         items = [{"key": i["key"], "name": i["name"], "clip": naming.strip_suffix(i.get("clip", "")) or i["track"],
                   "track": i["track"], "tc_in": i.get("tc_in", ""), "tc_out": i.get("tc_out", ""),
                   "secs": round((i["end"] - i["start"]) / 48000, 1), "muted": i["muted"], "done": i["done"],
-                  "ref": i.get("ref", False), "cur": i["key"] == cur} for i in q["items"]]
+                  "ref": i.get("ref", False), "cur": i["key"] == cur, "character": i.get("character"),
+                  "cara": cara(i)} for i in q["items"]]
         now = next((i for i in items if i["cur"]), None)
         if now is None and cur and self.follow_item and self.follow_item.get("key") == cur:
             fi = self.follow_item
             now = {"key": cur, "name": fi["name"], "clip": naming.strip_suffix(fi.get("clip", "")), "track": fi["track"],
-                   "tc_in": fi.get("tc_in", ""), "ref": fi.get("ref", False)}
+                   "tc_in": fi.get("tc_in", ""), "ref": fi.get("ref", False), "character": fi.get("character"),
+                   "cara": cara(fi)}
         return {"ok": True, "session": snap["session"], "at": snap["at"], "kind": kind, "tracks": order,
                 "now": now, "items": items}
 
@@ -1715,14 +1743,24 @@ class RecController:
     def choice(self, body):
         with self.lock:
             st = self.store()
-            if body.get("character") and "char_shoe" in body:      # calzado fijo de un personaje (todas las sesiones)
-                user = load_json(RULES_FILE, {})
-                cs = user.setdefault("char_shoes", {})
-                if body["char_shoe"]:
-                    cs[str(body["character"]).upper()] = body["char_shoe"]
+            if body.get("character") and "char_shoe" in body:      # calzado fijo de un personaje (en el proyecto)
+                proj = proyecto_actual()
+                if proj:
+                    STORE.set_char_shoe(proj, str(body["character"]), body["char_shoe"] or "")
                 else:
-                    cs.pop(str(body["character"]).upper(), None)
-                RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
+                    user = load_json(RULES_FILE, {})
+                    cs = user.setdefault("char_shoes", {})
+                    if body["char_shoe"]:
+                        cs[str(body["character"]).upper()] = body["char_shoe"]
+                    else:
+                        cs.pop(str(body["character"]).upper(), None)
+                    RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
+                if not body["char_shoe"]:          # «sin fijar» también tiene que sacar el global viejo
+                    user = load_json(RULES_FILE, {})
+                    if naming.norm(body["character"]) in {naming.norm(k) for k in user.get("char_shoes", {})}:
+                        user["char_shoes"] = {k: v for k, v in user["char_shoes"].items()
+                                              if naming.norm(k) != naming.norm(body["character"])}
+                        RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
             if body.get("key") and self.snap:
                 ch = self._sess(st).setdefault("choices", {})
                 c = ch.setdefault(body["key"], {})
@@ -2002,6 +2040,24 @@ class Projects:
                 i for i in items if not (i["track"] == track and i["name"].lower() == name.lower())]
             self._save(d)
 
+    def items(self, project: str) -> list:
+        return [dict(i) for i in self._load()["projects"].get(project, [])]
+
+    def merge(self, project: str, items: list, replace=False):
+        """Nombres escritos a mano que llegan de otra compu (importar proyecto)."""
+        with self.lock:
+            d = self._load()
+            dst = [] if replace else d["projects"].setdefault(project, [])
+            have = {(i["track"], i["name"].lower()) for i in dst}
+            for i in items:
+                k = (str(i["track"]), str(i["name"]).lower())
+                if k not in have:
+                    have.add(k)
+                    dst.append({"track": str(i["track"]), "name": str(i["name"]),
+                                "uses": int(i.get("uses", 1) or 1), "last": int(i.get("last", 0) or 0)})
+            d["projects"][project] = dst
+            self._save(d)
+
     def view(self, session: str) -> dict:
         proj = self.project_for(session)
         items = self._load()["projects"].get(proj, [])
@@ -2014,6 +2070,7 @@ class Projects:
 
 
 PROJECTS = Projects(PROJECTS_FILE)
+STORE = proyecto.ProjectStore(PROJECTS_DIR)
 
 
 def with_ref(name: str) -> str:
@@ -2094,7 +2151,7 @@ def make_app(pt, rec=None):
 
     @routes.get("/api/presets")
     async def presets(_):
-        return web.json_response(load_json(PRESETS_FILE, {"categories": []}))
+        return web.json_response(presets_proyecto())
 
     # El editor del iPad guarda acá las categorías (botones, nombres, tracks destino)
     @routes.put("/api/presets")
@@ -2107,7 +2164,21 @@ def make_app(pt, rec=None):
         data["categories"] = clean["categories"]
         PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
         log.info("Presets guardados desde el iPad (%s categorías)", len(clean["categories"]))
-        return web.json_response(data)
+        return web.json_response(presets_proyecto())
+
+    # Botonera del proyecto: agregados y ocultos sobre la genérica (la genérica no se toca)
+    @routes.put("/api/project/botonera")
+    async def put_botonera(req):
+        proj = proyecto_actual()
+        if not proj:
+            return web.json_response({"ok": False, "error": "No hay sesión abierta"}, status=409)
+        try:
+            gen = [c["id"] for c in load_json(PRESETS_FILE, {}).get("categories", [])]
+            bot = proyecto.limpiar_botonera(await req.json(), clean_presets, gen)
+        except (ValueError, AttributeError, TypeError) as e:
+            return web.json_response({"ok": False, "error": f"No se pudo guardar: {e}"}, status=400)
+        STORE.set_botonera(proj, bot)
+        return web.json_response(presets_proyecto())
 
     # Carpetas / tracks ocultos en la botonera (se guardan por nombre: valen para cualquier sesión)
     @routes.get("/api/hidden")
@@ -2139,7 +2210,7 @@ def make_app(pt, rec=None):
     # Atajo para teclado/Stream Deck: /api/group/hands/3 → 3er botón de "hands"
     @routes.post("/api/group/{cat}/{n}")
     async def group_slot(req):
-        cats = load_json(PRESETS_FILE, {"categories": []})["categories"]
+        cats = presets_proyecto()["categories"]
         cat = next((c for c in cats if c["id"] == req.match_info["cat"]), None)
         try:
             item = cat["items"][int(req.match_info["n"]) - 1]
@@ -2208,9 +2279,168 @@ def make_app(pt, rec=None):
     def excluded():
         return load_json(PRESETS_FILE, {}).get("exclude_folders", [])
 
+    def fts_de(lay):
+        """Tracks de la carpeta de pasos, en orden (de la botonera por categorías)."""
+        k = next((k for k in lay.get("kinds", []) if k["kind"] == "footsteps"), None)
+        return [t for g in (k or {}).get("groups", []) for t in g["tracks"]]
+
+    def personajes_view(lay):
+        proj = proyecto_actual()
+        d = STORE.load(proj) if proj else proyecto.vacio("")
+        fts = fts_de(lay) if lay else []
+        shoe_tracks = {t["name"] for t in fts
+                       if naming.classify_fts(t["name"], load_rules())["type"] == "shoe"}
+        sec = [n for g in (PROJECTS.view(CURRENT["session"])["tracks"] if CURRENT["session"] else [])
+               if g["track"] in shoe_tracks for n in g["names"]]
+        v = proyecto.vista_personajes(d, fts, load_rules(), sec)
+        v["session"] = CURRENT["session"]
+        return v
+
     @routes.get("/api/layout")
     async def layout(_):
-        return await run(pt.layout, excluded())
+        loop = asyncio.get_running_loop()
+        try:
+            lay = await loop.run_in_executor(None, pt.layout, excluded())
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
+        try:      # caras y calzados para la pestaña Pasos (si falla, la botonera sale igual)
+            lay["personajes"] = personajes_view(lay)
+        except Exception:                          # noqa: BLE001
+            log.exception("personajes")
+        return web.json_response(lay)
+
+    # ---- Personajes (carímetro) ------------------------------------------- #
+    def proj_o_error():
+        proj = proyecto_actual()
+        if not proj:
+            raise SpotError("Abrí una sesión en Pro Tools: los personajes son del proyecto")
+        return proj
+
+    @routes.get("/api/personajes")
+    async def personajes(_):
+        loop = asyncio.get_running_loop()
+        try:
+            lay = await loop.run_in_executor(None, pt.layout, excluded())
+        except SpotError:
+            lay = None                             # sin Pro Tools: igual se ven los guardados
+        return web.json_response(personajes_view(lay))
+
+    @routes.post("/api/personajes")
+    async def personaje_save(req):
+        try:
+            p = STORE.guardar_personaje(proj_o_error(), await req.json())
+        except (ValueError, SpotError) as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return web.json_response({"ok": True, "personaje": p})
+
+    @routes.delete("/api/personajes/{pid}")
+    async def personaje_del(req):
+        try:
+            STORE.borrar_personaje(proj_o_error(), req.match_info["pid"])
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
+        return web.json_response({"ok": True})
+
+    @routes.put("/api/personajes/{pid}/cara")
+    async def cara_put(req):
+        try:
+            p = STORE.guardar_cara(proj_o_error(), req.match_info["pid"],
+                                   await req.content.read(proyecto.MAX_CARA + 1))
+        except (ValueError, SpotError) as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return web.json_response({"ok": True, "personaje": p})
+
+    @routes.delete("/api/personajes/{pid}/cara")
+    async def cara_del(req):
+        try:
+            STORE.quitar_cara(proj_o_error(), req.match_info["pid"])
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
+        return web.json_response({"ok": True})
+
+    @routes.get("/api/cara/{pid}")
+    async def cara_get(req):
+        proj = proyecto_actual()
+        c = STORE.cara(proj, req.match_info["pid"]) if proj else None
+        if not c:
+            return web.Response(status=404)
+        return web.Response(body=c[0], content_type=c[1], headers={"Cache-Control": "max-age=31536000"})
+
+    # Pasos: personaje + calzado → el clip group va al track que corresponde
+    @routes.post("/api/fts/group")
+    async def fts_group(req):
+        body = await req.json()
+        loop = asyncio.get_running_loop()
+        try:
+            lay = await loop.run_in_executor(None, pt.layout, excluded())
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
+        fts = fts_de(lay)
+        proj = proyecto_actual()
+        nombre = str(body.get("personaje", "")).strip()
+        p = next((x for x in (STORE.load(proj)["personajes"] if proj else [])
+                  if naming.norm(nombre) in {naming.norm(n) for n in [x["nombre"], *x.get("alias", [])]}), None)
+        try:
+            dst = proyecto.fts_destino(nombre, body.get("calzado", ""), fts, load_rules(),
+                                       alias=(p or {}).get("alias", ()))
+        except ValueError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
+        tid = next(t["id"] for t in fts if t["name"] == dst["track"])
+        clip = with_ref(dst["clip"]) if body.get("ref") else dst["clip"]
+        resp = await run(pt.group_on_track, tid, clip)
+        if resp.status == 200 and not dst["principal"] and CURRENT["session"]:
+            PROJECTS.add(CURRENT["session"], dst["track"], nombre)      # queda como secundario del proyecto
+        return resp
+
+    # ---- Exportar / importar (archivo .spotpad) --------------------------- #
+    def descarga(data: bytes, nombre: str):
+        from urllib.parse import quote
+        return web.Response(body=data, content_type="application/zip", headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(nombre)}",
+            "Cache-Control": "no-store"})
+
+    @routes.get("/api/export/proyecto")
+    async def export_proyecto(req):
+        proj = req.query.get("p") or proyecto_actual()
+        if not proj:
+            return web.json_response({"ok": False, "error": "No hay sesión abierta"}, status=409)
+        data = proyecto.exportar_proyecto(STORE, proj, PROJECTS.items(proj), VERSION)
+        return descarga(data, f"{proyecto.slug(proj)}.spotpad")
+
+    @routes.get("/api/export/generica")
+    async def export_generica(_):
+        return descarga(proyecto.exportar_generica(DATA, VERSION, sys.platform), "SpotPad genérica.spotpad")
+
+    @routes.post("/api/import")
+    async def importar(req):
+        modo = "reemplazar" if req.query.get("modo") == "reemplazar" else "mezclar"
+        try:
+            pkg = proyecto.leer_paquete(await req.content.read(proyecto.MAX_PAQUETE + 1))
+            if pkg["tipo"] == "generica":
+                hechos = proyecto.importar_generica(pkg, DATA, sys.platform)
+                migrate_presets()
+                if ON_SETTINGS:
+                    try:
+                        ON_SETTINGS()
+                    except Exception:              # noqa: BLE001
+                        log.exception("ajustes tras importar")
+                log.info("Genérica importada: %s", ", ".join(hechos))
+                return web.json_response({"ok": True, "tipo": "generica",
+                                          "msg": "Configuración genérica importada (la anterior quedó en un respaldo)"})
+            nombre, items = proyecto.importar_proyecto(STORE, pkg, modo)
+            PROJECTS.merge(nombre, items, replace=(modo == "reemplazar"))
+        except ValueError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        log.info("Proyecto importado: %s (%s)", nombre, modo)
+        return web.json_response({"ok": True, "tipo": "proyecto", "proyecto": nombre,
+                                  "actual": proyecto_actual(), "msg": f"Proyecto «{nombre}» importado"})
+
+    # Carímetro para imprimir
+    @routes.get("/carimetro")
+    async def carimetro(_):
+        html = (RES / "static" / "carimetro.html").read_text("utf-8").replace("__SPOTPAD_VERSION__", VERSION)
+        return web.Response(text=html, content_type="text/html",
+                            headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
     @routes.post("/api/group-on/{track_id:[^/]+}")
     async def group_on(req):
@@ -2266,7 +2496,9 @@ def make_app(pt, rec=None):
         body = await req.json()
         if not CURRENT["session"]:
             return web.json_response({"ok": False, "error": "No hay sesión abierta"}, status=409)
+        viejo = PROJECTS.project_for(CURRENT["session"])
         PROJECTS.set_project(CURRENT["session"], str(body.get("project", "")))
+        STORE.copiar(viejo, PROJECTS.project_for(CURRENT["session"]))   # personajes y botonera también
         return web.json_response(PROJECTS.view(CURRENT["session"]))
 
     @routes.post("/api/project/remove")

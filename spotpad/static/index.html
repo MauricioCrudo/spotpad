@@ -318,12 +318,64 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
   .rmain{min-height:auto}
 }
 
+/* ===== Personajes: caras en Pasos y carímetro ===== */
+.face{width:36px;height:36px;border-radius:50%;object-fit:cover;flex:none;background:var(--press);display:inline-grid;place-items:center;
+  font-size:13px;font-weight:700;color:var(--dim);overflow:hidden}
+.tpad.withface{flex-direction:row;align-items:center;gap:10px;justify-content:flex-start}
+.tpad.withface .face{width:46px;height:46px}
+.tpad.withface .tx2{display:flex;flex-direction:column;min-width:0}
+.fpick{border:1px solid var(--line);border-radius:var(--r);padding:10px;margin-bottom:12px;background:var(--surface)}
+.fpick .lbl2{font-size:13px;color:var(--dim);margin:0 2px 6px;font-weight:550}
+.frow{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:10px}
+.frow::-webkit-scrollbar{display:none}
+.frow:last-child{margin-bottom:0}
+.frow[data-r=s]{flex-wrap:wrap;overflow:visible}
+.fchar{flex:none;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--raised);border-radius:999px;
+  padding:4px 14px 4px 4px;font-weight:600;font-size:15px;min-height:46px}
+.fchar.plain{padding:4px 14px}
+.fchar.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);color:var(--accent)}
+.fshoe{flex:none;border:1px solid var(--line);background:var(--raised);border-radius:12px;padding:0 16px;min-height:52px;font-weight:620;font-size:15px}
+.fshoe.own{border-color:var(--accent)}
+.fshoe small{display:block;font-size:11px;color:var(--dim);font-weight:500}
+.fshoe:active,.fchar:active{background:var(--press)}
+.fshoe.busy{opacity:.55}
+#viewCaras{display:none;flex:1;min-height:0;padding:0 16px calc(16px + var(--tab-h) + env(safe-area-inset-bottom))}
+body.caras #viewPads{display:none}
+body.caras #viewCaras{display:flex}
+#viewCaras > section{flex:1;overflow:auto}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.ccard{border:1px solid var(--line);border-radius:var(--r-lg);background:var(--raised);overflow:hidden;text-align:left;padding:0;
+  display:flex;flex-direction:column;box-shadow:var(--shadow)}
+.ccard .ph{aspect-ratio:3/4;background:var(--press);display:grid;place-items:center;color:var(--faint);font-size:42px;font-weight:700;
+  overflow:hidden;text-align:center}
+.ccard .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ccard .ph small{display:block;font-size:12px;font-weight:500;margin-top:4px}
+.ccard .in{padding:10px 12px 12px}
+.ccard .nm{font-size:19px;font-weight:700;line-height:1.15;word-break:break-word}
+.ccard .ac{font-size:13px;color:var(--dim)}
+.ccard .sh{font-size:12px;color:var(--faint);margin-top:4px}
+.ccard.nuevo{border-style:dashed;background:none;opacity:.8;box-shadow:none}
+.ccard.drop,.pjface.drop .ph{box-shadow:0 0 0 2px var(--accent)}
+.pjface{display:flex;gap:12px;align-items:center}
+.pjface .ph{width:96px;aspect-ratio:3/4;border-radius:12px;background:var(--press);overflow:hidden;display:grid;place-items:center;
+  color:var(--faint);font-size:30px;font-weight:700;flex:none}
+.pjface .ph img{width:100%;height:100%;object-fit:cover}
+.pjface .bt{display:grid;gap:8px;flex:1}
+.xfer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.xfer .hbtn{flex:1;text-align:center;text-decoration:none}
+.scope{display:inline-flex;gap:2px;border:1px solid var(--line);border-radius:999px;padding:2px;flex:none;align-self:center}
+.scope button{border:0;background:none;color:var(--dim);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600}
+.scope button.sel{background:var(--accent);color:var(--on-accent)}
+.pad.oculto{opacity:.4;border-style:dotted}
+.pad .dest .tagp{color:var(--accent);font-weight:650}
+
 /* ===== Teléfono ===== */
 @media (max-width:640px){
   :root{--tab-h:60px}
   header{padding:10px 14px}
   .brand{display:none}
-  main,#viewList,#viewRec{padding-left:10px;padding-right:10px}
+  main,#viewList,#viewRec,#viewCaras{padding-left:10px;padding-right:10px}
+  .cgrid{grid-template-columns:repeat(2,1fr);gap:8px}
   section{padding:12px;border-radius:16px}
   .views{position:fixed;left:0;right:0;bottom:0;z-index:10;border-radius:0;border:0;border-top:1px solid var(--line);
     padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--surface) 92%,transparent);
@@ -377,7 +429,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
     <span id="session" class="mono">conectando…</span>
   </button>
   <button class="hbtn" id="reconBtn">Reconectar</button>
-  <nav class="views"><button id="vPads" class="sel">Botonera</button><button id="vFolders">Carpetas</button><button id="vList">Lista<span class="badge" id="newCount"></span></button><button id="vRec">Grabar</button></nav>
+  <nav class="views"><button id="vPads" class="sel">Botonera</button><button id="vFolders">Carpetas</button><button id="vList">Lista<span class="badge" id="newCount"></span></button><button id="vRec">Grabar</button><button id="vCaras">Caras</button></nav>
   <button class="icon" id="gearBtn" title="Ajustes y temas" aria-label="Ajustes">⚙︎</button>
 </header>
 <div id="updBar" hidden role="status">
@@ -428,6 +480,33 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
     <div class="clips" id="clips"></div>
   </section>
 </div>
+
+<div id="viewCaras">
+  <section>
+    <div class="ltools">
+      <span class="lstat" id="cStat">—</span>
+      <button class="hbtn" id="cAdd">+ Personaje</button>
+      <button class="hbtn" id="cPrint">Imprimir</button>
+      <button class="hbtn" id="cRefresh">Actualizar</button>
+    </div>
+    <div class="cgrid" id="cGrid"></div>
+  </section>
+</div>
+
+<dialog id="edPj">
+  <div class="dhead"><b id="pjTitle">Personaje</b><button class="hbtn" id="pjCancel">Cancelar</button></div>
+  <div class="ef">
+    <div class="pjface" id="pjDrop"><div class="ph" id="pjPh"></div><div class="bt">
+      <button class="hbtn" id="pjPhoto">Elegir o sacar foto</button><button class="hbtn" id="pjNoPhoto">Quitar foto</button></div></div>
+    <input type="file" id="pjFile" accept="image/*" hidden>
+    <label>Nombre (como en el track)<input id="pjName" autocomplete="off" autocapitalize="words"></label>
+    <label>Actor o actriz<input id="pjActor" autocomplete="off" autocapitalize="words"></label>
+    <label>Otros nombres en los clips (con coma)<input id="pjAlias" autocomplete="off" autocapitalize="words" placeholder="Hank, Henry Jr"></label>
+    <label>Calzado de siempre<select id="pjShoe"></select></label>
+    <label>Notas<input id="pjNotes" autocomplete="off"></label>
+  </div>
+  <div class="ebtns"><button class="hbtn danger" id="pjDelete">Borrar</button><button class="hbtn" id="pjMove">◀ Antes</button><button class="hbtn" id="pjSave">Guardar</button></div>
+</dialog>
 
 <dialog id="dlg">
   <div class="dhead"><b id="dlgTitle">Tracks destino</b><button class="hbtn" id="done">Listo</button></div>
@@ -500,6 +579,7 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
 <dialog id="stat">
   <div class="dhead"><b>Ajustes</b><button class="hbtn" id="statClose">Cerrar</button></div>
   <div class="themes"><div class="tl">Tema</div><div class="tlist" id="themeList"></div></div>
+  <div class="themes" id="xferBox"></div>
   <div class="themes" id="editBox"></div>
   <div class="st" id="stBody"></div>
   <div class="sbtns">
@@ -542,7 +622,7 @@ function renderThemes() {
 applyTheme(themeChoice());
 if (window.matchMedia) matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme(themeChoice()));   // la pone el servidor; si SpotPad se actualiza, la página se recarga sola
 const $ = s => document.querySelector(s);
-let presets = [], catIdx = 0, tracks = [], targets = [], prefix = '', prefixOpts = [], lastClip = '';
+let presets = [], presetData = {todas: [], generica: [], botonera: {categorias: [], agregados: {}, ocultas: [], ocultos: {}}, proyecto: ''}, catIdx = 0, tracks = [], targets = [], prefix = '', prefixOpts = [], lastClip = '';
 
 async function api(path, opts = {}) {
   const r = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...opts});
@@ -781,7 +861,7 @@ async function renderStat() {
     renderStat();
   };
 }
-$('#conn').onclick = $('#gearBtn').onclick = () => { renderThemes(); renderEditBox(); $('#stat').showModal(); renderStat(); };
+$('#conn').onclick = $('#gearBtn').onclick = () => { renderThemes(); renderXfer(); renderEditBox(); $('#stat').showModal(); renderStat(); };
 $('#statClose').onclick = () => $('#stat').close();
 $('#reconBtn').onclick = reconnect;
 $('#stRecon').onclick = reconnect;
@@ -831,7 +911,7 @@ function allTabs() {
     const kinds = (layout.kinds || []).map(k => ({...k, groups: k.groups.map(visTracks).filter(g => g.tracks.length)}))
                                       .filter(k => k.groups.length);
     return [...kinds.map(k => ({key: 'k:' + k.kind, label: k.label, kind: 'folder', kindTab: true, tab: {name: k.label, groups: k.groups}})),
-            ...presets.map(p => ({key: 'p:' + p.id, label: p.label, kind: 'preset', cat: p})),
+            ...presets.map(p => ({key: 'p:' + p.id, label: p.label, kind: 'preset', cat: p, hiddenTab: !!p.oculta})),
             ...(project && project.session ? [{key: 'j:proyecto', kind: 'project',
                 label: '★ ' + project.project + ' (' + project.tracks.reduce((n, g) => n + g.names.length, 0) + ')'}] : [])];
   }
@@ -857,7 +937,7 @@ $('#refBtn').onclick = () => { setRef(!refOn); toast(refOn ? 'REF: el próximo c
 let project = null;     // nombres escritos a mano en este proyecto (por track)
 async function loadProject() { project = await api('/api/project').catch(() => project); }
 async function loadLayout(quiet) {
-  await loadProject();
+  await Promise.all([loadProject(), loadPresets()]);
   try { layout = await api('/api/layout'); layoutErr = ''; }
   catch (e) { layout = {tabs: []}; layoutErr = e.message; if (!quiet) toast(e.message, true); }
   const tabs = allTabs();
@@ -881,6 +961,16 @@ function renderCats() {
   });
   const selc = c2.querySelector('.sel');             // en el teléfono la fila se desliza: mostrar la elegida
   if (selc) try { selc.scrollIntoView({inline: 'nearest', block: 'nearest'}); } catch {}
+  if (editing && !foldersMode() && presetData.proyecto) {   // qué se edita: la genérica o el proyecto
+    const sc = document.createElement('span'); sc.className = 'scope';
+    [['generica', 'Genérica'], ['proyecto', '★ ' + presetData.proyecto]].forEach(([k, l]) => {
+      const b = document.createElement('button'); b.textContent = l; b.classList.toggle('sel', editScope() === k);
+      b.onclick = () => { ls.set('spotpad.editScope', k); syncPresets(); if (!allTabs().find(t => t.key === tabKey)) tabKey = null;
+                          renderCats(); renderGrid(); toast(k === 'proyecto' ? 'Editando solo este proyecto' : 'Editando la genérica (todos los proyectos)'); };
+      sc.append(b);
+    });
+    c2.prepend(sc);
+  }
   if (editing && !foldersMode()) {
     const a = document.createElement('button'); a.className = 'cat add'; a.textContent = '+ Categoría';
     a.onclick = () => openCat(null); c2.append(a);
@@ -907,6 +997,8 @@ function renderGrid() {
     bar.querySelector('[data-a=new]').onclick = () => createTrackIn(layout.tabs.find(x => x.name === t.tab.name) || t.tab);
   }
   w.append(bar);
+  if (t.key === 'k:footsteps' && !editing) { const fp = ftsPicker(); if (fp) w.append(fp); }
+  const caraT = trackFaces();
   let n = 0;
   t.tab.groups.forEach(g => {
     if (g.name || t.hiddenTab) {
@@ -924,6 +1016,12 @@ function renderGrid() {
       b.innerHTML = '<span class="k"></span><span class="lab"></span><span class="hide"></span>';
       b.querySelector('.k').textContent = ++n; b.querySelector('.lab').textContent = tr.name;
       b.querySelector('.hide').textContent = t.hiddenTab ? 'mostrar' : 'ocultar';
+      const pj = caraT[tr.name];
+      if (pj) {        // personaje con cara: la foto al lado del nombre
+        b.classList.add('withface');
+        const tx = document.createElement('span'); tx.className = 'tx2';
+        tx.append(b.querySelector('.k'), b.querySelector('.lab')); b.prepend(faceEl(pj), tx);
+      }
       if (t.inactiveTab) {
         b.classList.add('offpad');
         b.querySelector('.hide').textContent = tr.folder ? 'carpeta' : '';
@@ -997,7 +1095,7 @@ function renderProjectGrid(w) {
             (project.known.length ? 'Proyectos: ' + project.known.join(', ') : '')});
     if (!r) return;
     try { project = await api('/api/project', {method: 'PUT', body: JSON.stringify({project: r.name})}); tabKey = 'j:proyecto';
-          renderCats(); renderGrid(); toast('Proyecto: ' + project.project); }
+          await loadPresets(); renderCats(); renderGrid(); toast('Proyecto: ' + project.project); }
     catch (e) { toast(e.message, true); }
   };
   w.append(bar);
@@ -1033,17 +1131,34 @@ function renderProjectGrid(w) {
   });
 }
 function renderPresetGrid(w, cat) {
+  const proj = editing && editScope() === 'proyecto';
+  if (proj && cat.scope === 'generica') {
+    const bar = document.createElement('div'); bar.className = 'fbar always';
+    bar.innerHTML = '<span></span>';
+    bar.firstChild.textContent = cat.oculta ? `«${cat.label}» está oculta en este proyecto.`
+      : 'Categoría de la genérica: tocá un botón para ocultarlo solo en este proyecto, o sumale botones propios.';
+    w.append(bar);
+  }
   const g = document.createElement('div'); g.className = 'grid'; w.append(g);
   cat.items.forEach((it, i) => {
     const name = iName(it), track = iTrack(it, cat);
     const b = document.createElement('button');
-    b.className = 'pad'; b.style.setProperty('--cc', cat.color);
+    b.className = 'pad' + (it.oculto ? ' oculto' : ''); b.style.setProperty('--cc', cat.color);
     b.innerHTML = `<span class="k">${i + 1}</span><span><div class="lab"></div><div class="dest"></div></span>`;
     b.querySelector('.lab').textContent = name;
     const d = b.querySelector('.dest');
     d.textContent = track ? '→ ' + track : '→ track seleccionado';
     if (track && layout.tabs.length && !hasTrack(track)) { d.classList.add('miss'); d.textContent = '→ ' + track + ' (no está)'; }
+    if (proj && (it.proyecto || it.oculto)) {
+      const tg = document.createElement('span'); tg.className = 'tagp';
+      tg.textContent = it.oculto ? 'oculto en el proyecto · ' : (cat.scope === 'generica' ? 'del proyecto · ' : ''); d.prepend(tg);
+    }
     b.onclick = async () => {
+      if (editing && proj && !it.proyecto) {      // botón de la genérica: en el proyecto solo se oculta
+        const o = presetData.botonera.ocultos[cat.id] = presetData.botonera.ocultos[cat.id] || [];
+        const now = toggleIn(o, name);
+        return savePresets(now ? `«${name}» oculto en este proyecto` : `«${name}» visible en este proyecto`);
+      }
       if (editing) return openItem(cat, i);
       if (b.classList.contains('busy')) return;
       b.classList.add('busy');
@@ -1057,8 +1172,13 @@ function renderPresetGrid(w, cat) {
   if (editing) {
     const add = document.createElement('button'); add.className = 'pad add'; add.textContent = '+ Botón';
     add.onclick = () => openItem(cat, -1); g.append(add);
-    const ed = document.createElement('button'); ed.className = 'pad add'; ed.textContent = 'Editar categoría';
-    ed.onclick = () => openCat(cat); g.append(ed);
+    const ed = document.createElement('button'); ed.className = 'pad add';
+    if (proj && cat.scope === 'generica') {
+      ed.textContent = cat.oculta ? 'Mostrar en el proyecto' : 'Ocultar en el proyecto';
+      ed.onclick = () => { const now = toggleIn(presetData.botonera.ocultas, cat.id);
+                           savePresets(now ? `«${cat.label}» oculta en este proyecto` : `«${cat.label}» visible en este proyecto`); };
+    } else { ed.textContent = 'Editar categoría'; ed.onclick = () => openCat(cat); }
+    g.append(ed);
   }
 }
 
@@ -1081,12 +1201,29 @@ function fillTrackSelect(sel, current, emptyLabel) {
     if (m) sel.value = m.value;
   }
 }
+// Botonera = genérica + lo del proyecto. Editando, se elige cuál se toca (la genérica no cambia desde el proyecto).
+const editScope = () => (presetData.proyecto && ls.get('spotpad.editScope', 'generica') === 'proyecto') ? 'proyecto' : 'generica';
+function syncPresets() {
+  if (editing && editScope() === 'generica') presets = presetData.generica;     // los objetos crudos: el editor de siempre
+  else if (editing) presets = presetData.todas;
+  else presets = presetData.todas.filter(c => !c.oculta).map(c => ({...c, items: c.items.filter(i => !i.oculto)}));
+}
+function applyPresets(r) { presetData = {...presetData, ...r}; syncPresets(); }
+async function loadPresets() { try { applyPresets(await api('/api/presets')); } catch {} }
 async function savePresets(msg) {
   try {
-    const r = await api('/api/presets', {method: 'PUT', body: JSON.stringify({categories: presets})});
-    presets = r.categories || []; toast(msg || 'Guardado'); buzz(true);
-  } catch (e) { toast(e.message, true); presets = (await api('/api/presets')).categories || []; }
+    const r = editScope() === 'proyecto'
+      ? await api('/api/project/botonera', {method: 'PUT', body: JSON.stringify(presetData.botonera)})
+      : await api('/api/presets', {method: 'PUT', body: JSON.stringify({categories: presets})});
+    applyPresets(r); toast(msg || 'Guardado'); buzz(true);
+  } catch (e) { toast(e.message, true); await loadPresets(); }
   renderCats(); renderGrid();
+}
+// Lista del proyecto donde va un botón de esta categoría (agregados a una genérica, o la categoría propia)
+function projList(cat) {
+  const b = presetData.botonera;
+  if (cat.scope === 'proyecto') return (b.categorias.find(c => c.id === cat.id) || {items: []}).items;
+  return (b.agregados[cat.id] = b.agregados[cat.id] || []);
 }
 let edCtx = null;
 function openItem(cat, i) {
@@ -1105,13 +1242,15 @@ $('#edSave').onclick = () => {
   if (!name) return toast('Poné un nombre', true);
   const item = track ? {name, track} : name;
   const {cat, i} = edCtx;
-  if (i >= 0) cat.items[i] = item; else cat.items.push(item);
+  if (editScope() === 'proyecto') { const l = projList(cat); if (i >= 0) l[cat.items[i].pi] = item; else l.push(item); }
+  else if (i >= 0) cat.items[i] = item; else cat.items.push(item);
   $('#edItem').close(); savePresets('Botón guardado');
 };
 $('#edDelete').onclick = () => {
   const {cat, i} = edCtx;
   if (!confirmTap($('#edDelete'))) return;
-  cat.items.splice(i, 1); $('#edItem').close(); savePresets('Botón borrado');
+  if (editScope() === 'proyecto') projList(cat).splice(cat.items[i].pi, 1); else cat.items.splice(i, 1);
+  $('#edItem').close(); savePresets('Botón borrado');
 };
 // Borrar pide un segundo toque (sin diálogos del sistema)
 function confirmTap(btn) {
@@ -1133,10 +1272,14 @@ $('#edCatCancel').onclick = () => $('#edCat').close();
 $('#ecSave').onclick = () => {
   const label = $('#ecLabel').value.trim(); if (!label) return toast('Poné un nombre', true);
   let cat = edCtx.cat;
+  const proj = editScope() === 'proyecto';
+  if (proj && cat) cat = presetData.botonera.categorias.find(c => c.id === cat.id);
   if (!cat) {
-    const base = label.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cat';
-    let id = base, k = 2; while (presets.some(p => p.id === id)) id = base + '-' + k++;
-    cat = {id, label, color: $('#ecColor').value, items: []}; presets.push(cat);
+    const base = (proj ? 'p-' : '') + (label.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cat');
+    const used = id => presetData.todas.some(p => p.id === id) || presetData.generica.some(p => p.id === id);
+    let id = base, k = 2; while (used(id)) id = base + '-' + k++;
+    cat = {id, label, color: $('#ecColor').value, items: []};
+    (proj ? presetData.botonera.categorias : presets).push(cat);
     tabKey = 'p:' + id; ls.set(tabStore(), tabKey);
   }
   cat.label = label; cat.color = $('#ecColor').value;
@@ -1145,19 +1288,262 @@ $('#ecSave').onclick = () => {
 };
 $('#ecDelete').onclick = () => {
   if (!confirmTap($('#ecDelete'))) return;
-  presets = presets.filter(p => p !== edCtx.cat); tabKey = null;
+  if (editScope() === 'proyecto') presetData.botonera.categorias = presetData.botonera.categorias.filter(c => c.id !== edCtx.cat.id);
+  else presets = presets.filter(p => p !== edCtx.cat);
+  tabKey = null;
   $('#edCat').close(); savePresets('Categoría borrada');
 };
 $('#editBtn').onclick = () => {
   editing = !editing; document.body.classList.toggle('editing', editing);
   $('#editBtn').classList.toggle('on', editing); $('#editBtn .tx').textContent = editing ? 'Listo' : 'Editar'; $('#editBtn .ic').textContent = editing ? '✓' : '✎';
   if (editing && !layout.tabs.length) loadLayout(true);
+  syncPresets(); if (!allTabs().find(t => t.key === tabKey)) tabKey = allTabs()[0] && allTabs()[0].key;
   renderCats(); renderGrid();
 };
 
 function flash(el, ok) {
   buzz(ok); const c = ok ? 'flash-ok' : 'flash-err';
   el.classList.add(c); setTimeout(() => el.classList.remove(c), 450);
+}
+
+/* ---------- personajes: caras, pasos en dos toques, carímetro ---------- */
+const esc3 = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const iniciales = n => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+const caraUrl = p => `/api/cara/${encodeURIComponent(p.id)}?v=${p.cara_v || 0}`;
+function faceEl(p) {
+  if (p && p.cara) { const i = document.createElement('img'); i.className = 'face'; i.alt = ''; i.src = caraUrl(p); return i; }
+  const s = document.createElement('span'); s.className = 'face'; s.textContent = iniciales(p && p.nombre); return s;
+}
+function trackFaces() {
+  const out = {};
+  ((layout.personajes || {}).personajes || []).forEach(p => { if (p.track && p.cara) out[p.track] = p; });
+  return out;
+}
+// Pasos: tocás el personaje (queda elegido) y después el calzado → el clip va al track que corresponde
+function ftsPicker() {
+  const P = layout.personajes;
+  if (!P) return null;
+  const prin = P.personajes.filter(p => p.track || p.id);
+  const extra = ls.get('spotpad.ftsExtra', []);
+  const sec = [...P.secundarios, ...extra.filter(n => !P.secundarios.includes(n) && !prin.some(p => low(p.nombre) === low(n)))];
+  if (!prin.length && !sec.length && !P.calzados.length) return null;
+  let sel = ls.get('spotpad.ftsChar', '');
+  const box = document.createElement('div'); box.className = 'fpick';
+  box.innerHTML = '<div class="lbl2">Personaje</div><div class="frow" data-r="c"></div><div class="lbl2" data-l="s"></div><div class="frow" data-r="s"></div>';
+  const rc = box.querySelector('[data-r=c]'), rs = box.querySelector('[data-r=s]');
+  const draw = () => {
+    rc.innerHTML = ''; rs.innerHTML = '';
+    const pick = n => { sel = low(sel) === low(n) ? '' : n; ls.set('spotpad.ftsChar', sel); draw(); buzz(true); };
+    prin.forEach(p => {
+      const b = document.createElement('button'); b.className = 'fchar' + (low(sel) === low(p.nombre) ? ' sel' : '');
+      b.append(faceEl(p), document.createTextNode(p.nombre)); b.onclick = () => pick(p.nombre); rc.append(b);
+    });
+    sec.forEach(n => {
+      const b = document.createElement('button'); b.className = 'fchar plain' + (low(sel) === low(n) ? ' sel' : '');
+      b.textContent = n; b.onclick = () => pick(n); rc.append(b);
+    });
+    const o = document.createElement('button'); o.className = 'fchar plain'; o.textContent = '+ Otro';
+    o.onclick = async () => {
+      const r = await ask({title: 'Personaje', label: 'Nombre (va como nombre del clip)', hint: 'Secundarios y extras: «Sonia», «Extra Left».'});
+      if (!r || !r.name.trim()) return;
+      const n = r.name.trim(); ls.set('spotpad.ftsExtra', [n, ...extra.filter(x => low(x) !== low(n))].slice(0, 20));
+      if (!sec.some(x => low(x) === low(n))) sec.unshift(n);
+      sel = n; ls.set('spotpad.ftsChar', n); draw();
+    };
+    rc.append(o);
+    const p = prin.find(x => low(x.nombre) === low(sel));
+    box.querySelector('[data-l=s]').textContent = sel ? `Calzado de ${sel} → se marca` : 'Calzado (elegí primero el personaje)';
+    let shoes = P.calzados.map(c => c.label);
+    if (p && p.track && p.calzado && !shoes.some(x => low(x) === low(p.calzado))) shoes.unshift(p.calzado);
+    if (p && p.track && p.calzado) shoes = [p.calzado, ...shoes.filter(x => low(x) !== low(p.calzado))];
+    shoes.forEach(label => {
+      const own = p && p.track && p.calzado && low(label) === low(p.calzado);
+      const b = document.createElement('button'); b.className = 'fshoe' + (own ? ' own' : ''); b.disabled = !sel;
+      b.innerHTML = esc3(label) + (own ? '<small>el de siempre</small>' : (p && p.track ? '<small>en su track</small>' : ''));
+      b.onclick = async () => {
+        if (b.classList.contains('busy')) return;
+        b.classList.add('busy');
+        try { const r = await api('/api/fts/group', {method: 'POST', body: JSON.stringify({personaje: sel, calzado: own ? '' : label, ref: useRef()})});
+              flash(b, true); toast(r.msg); }
+        catch (e) { flash(b, false); toast(e.message, true); }
+        b.classList.remove('busy');
+      };
+      rs.append(b);
+    });
+    if (!shoes.length) rs.innerHTML = '<span class="cathint">No hay tracks de calzado en la carpeta de pasos</span>';
+  };
+  draw();
+  return box;
+}
+
+// Fotos: se achican en el iPad/compu antes de subir (no viaja la foto original de 12 MB)
+async function achicar(file, max = 640) {
+  let img;
+  try { img = await createImageBitmap(file); }
+  catch {
+    img = await new Promise((ok, err) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => err(new Error('No pude abrir la foto'));
+                                           i.src = URL.createObjectURL(file); });
+  }
+  const k = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.85));
+}
+async function subirCara(pid, file) {
+  if (!file || !/^image\//.test(file.type || 'image/')) throw new Error('Eso no es una foto');
+  const blob = await achicar(file);
+  const r = await fetch('/api/personajes/' + encodeURIComponent(pid) + '/cara', {method: 'PUT', headers: {'Content-Type': 'image/jpeg'}, body: blob});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) throw new Error(j.error || `Error ${r.status}`);
+  return j.personaje;
+}
+function droppable(el, onFile) {     // arrastrar una foto desde la compu
+  el.addEventListener('dragover', e => { if ([...(e.dataTransfer.types || [])].includes('Files')) { e.preventDefault(); el.classList.add('drop'); } });
+  el.addEventListener('dragleave', () => el.classList.remove('drop'));
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drop'); const f = e.dataTransfer.files[0]; if (f) onFile(f); });
+}
+
+let caras = null, shoeLabels = [];
+async function loadCaras() {
+  $('#cStat').textContent = 'Leyendo…';
+  try { caras = await api('/api/personajes'); }
+  catch (e) { $('#cStat').textContent = e.message; return; }
+  if (!shoeLabels.length) {
+    const r = await api('/api/rec/rules').catch(() => ({shoes: []}));
+    shoeLabels = [...new Set((r.shoes || []).map(s => s.label))];
+  }
+  renderCaras();
+}
+function renderCaras() {
+  const g = $('#cGrid'); g.innerHTML = '';
+  if (!caras.proyecto) {
+    $('#cStat').textContent = 'Abrí una sesión en Pro Tools: los personajes son del proyecto';
+    $('#cAdd').disabled = true; return;
+  }
+  $('#cAdd').disabled = false;
+  const nuevos = caras.personajes.filter(p => p.nuevo).length;
+  $('#cStat').textContent = `Proyecto «${caras.proyecto}» · ${caras.personajes.length - nuevos} personajes` +
+    (nuevos ? ` · ${nuevos} de la sesión sin agregar` : '');
+  if (!caras.personajes.length) {
+    g.innerHTML = '<div class="empty">No hay personajes todavía. Los tracks de personaje de la carpeta de pasos aparecen acá solos; también podés sumar uno con «+ Personaje».</div>';
+    return;
+  }
+  caras.personajes.forEach(p => {
+    const b = document.createElement('button'); b.className = 'ccard' + (p.nuevo ? ' nuevo' : '');
+    b.innerHTML = `<div class="ph">${p.cara ? `<img alt="" src="${caraUrl(p)}">`
+      : `<div>${esc3(iniciales(p.nombre))}<small>${p.nuevo ? 'Tocá para agregar' : 'Sin foto'}</small></div>`}</div>
+      <div class="in"><div class="nm">${esc3(p.nombre)}</div>${p.actor ? `<div class="ac">${esc3(p.actor)}</div>` : ''}
+      <div class="sh">${[p.calzado, p.track ? 'track ' + p.track : 'sin track en esta sesión'].filter(Boolean).map(esc3).join(' · ')}</div></div>`;
+    b.onclick = () => openPj(p);
+    droppable(b, async f => {
+      try { const pid = p.id || (await savePjBody({nombre: p.nombre})).id; await subirCara(pid, f); toast('Foto de ' + p.nombre); buzz(true); loadCaras(); }
+      catch (e) { toast(e.message, true); }
+    });
+    g.append(b);
+  });
+}
+async function savePjBody(body) {
+  return (await api('/api/personajes', {method: 'POST', body: JSON.stringify(body)})).personaje;
+}
+let pjCtx = null;
+function pjPhoto() {
+  const ph = $('#pjPh'), c = pjCtx;
+  if (c.blob) { ph.innerHTML = '<img alt="">'; ph.firstChild.src = URL.createObjectURL(c.blob); }
+  else if (c.p.cara && !c.quitar) { ph.innerHTML = `<img alt="" src="${caraUrl(c.p)}">`; }
+  else ph.textContent = iniciales($('#pjName').value || c.p.nombre);
+  $('#pjNoPhoto').style.display = (c.blob || (c.p.cara && !c.quitar)) ? '' : 'none';
+}
+function openPj(p) {
+  pjCtx = {p: p || {id: '', nombre: ''}, blob: null, quitar: false};
+  const q = pjCtx.p;
+  $('#pjTitle').textContent = q.id ? 'Personaje' : 'Nuevo personaje';
+  $('#pjName').value = q.nombre || ''; $('#pjActor').value = q.actor || ''; $('#pjNotes').value = q.notas || '';
+  $('#pjAlias').value = (q.alias || []).join(', ');
+  const sel = $('#pjShoe'); sel.innerHTML = '';
+  const opts = [['', q.track ? 'Según el track (nombre o color)' : '—'], ...shoeLabels.map(l => [l, l])];
+  if (q.calzado_fijo && !shoeLabels.includes(q.calzado_fijo)) opts.push([q.calzado_fijo, q.calzado_fijo]);
+  opts.forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; sel.append(o); });
+  sel.value = q.calzado_fijo || '';
+  $('#pjDelete').style.display = $('#pjMove').style.display = q.id ? '' : 'none';
+  pjPhoto();
+  $('#edPj').showModal();
+}
+$('#cAdd').onclick = () => openPj(null);
+$('#cRefresh').onclick = () => loadCaras();
+$('#cPrint').onclick = () => window.open('/carimetro', '_blank');
+$('#pjCancel').onclick = () => $('#edPj').close();
+$('#pjPhoto').onclick = () => $('#pjFile').click();
+$('#pjFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) { pjCtx.blob = f; pjCtx.quitar = false; pjPhoto(); } };
+$('#pjNoPhoto').onclick = () => { pjCtx.blob = null; pjCtx.quitar = true; pjPhoto(); };
+droppable($('#pjDrop'), f => { pjCtx.blob = f; pjCtx.quitar = false; pjPhoto(); });
+$('#pjSave').onclick = async () => {
+  const nombre = $('#pjName').value.trim(); if (!nombre) return toast('Poné el nombre', true);
+  const btn = $('#pjSave'); btn.disabled = true;
+  try {
+    const p = await savePjBody({id: pjCtx.p.id || undefined, nombre, actor: $('#pjActor').value, notas: $('#pjNotes').value,
+                                alias: $('#pjAlias').value, calzado: $('#pjShoe').value});
+    if (pjCtx.blob) await subirCara(p.id, pjCtx.blob);
+    else if (pjCtx.quitar && pjCtx.p.cara) await api('/api/personajes/' + encodeURIComponent(p.id) + '/cara', {method: 'DELETE'});
+    $('#edPj').close(); toast('Guardado: ' + nombre); buzz(true);
+    await loadCaras(); loadLayout(true);
+  } catch (e) { toast(e.message, true); }
+  btn.disabled = false;
+};
+$('#pjMove').onclick = async () => {
+  const saved = caras.personajes.filter(x => x.id), i = saved.findIndex(x => x.id === pjCtx.p.id);
+  if (i <= 0) return toast('Ya es el primero');
+  try { await savePjBody({id: pjCtx.p.id, nombre: pjCtx.p.nombre, orden: i - 1}); $('#edPj').close(); loadCaras(); }
+  catch (e) { toast(e.message, true); }
+};
+$('#pjDelete').onclick = async () => {
+  if (!confirmTap($('#pjDelete'))) return;
+  try { await api('/api/personajes/' + encodeURIComponent(pjCtx.p.id), {method: 'DELETE'}); $('#edPj').close(); loadCaras(); loadLayout(true); }
+  catch (e) { toast(e.message, true); }
+};
+
+// Ajustes → llevar el proyecto (o la genérica) a otra computadora
+function renderXfer() {
+  const box = $('#xferBox'), proj = presetData.proyecto;
+  box.innerHTML = `<div class="tl">Llevar a otra computadora</div>
+    <div class="k2" style="font-size:13px">${proj ? `Proyecto «${esc3(proj)}»: personajes con caras, botonera del proyecto, nombres y calzados.` : 'Abrí una sesión para exportar su proyecto.'}
+      La genérica: botonera base, reglas de pasos, ocultos, atajos y ajustes.</div>
+    <div class="xfer">
+      ${proj ? '<a class="hbtn" href="/api/export/proyecto" download>Exportar proyecto</a>' : ''}
+      <a class="hbtn" href="/api/export/generica" download>Exportar genérica</a>
+      <button class="hbtn" id="xImp">Importar…</button>
+    </div>
+    <input type="file" id="xFile" accept=".spotpad,.zip,application/zip" hidden>
+    <div id="xAsk" style="display:none;margin-top:8px">
+      <div class="k2" style="font-size:13px" id="xName"></div>
+      <div class="k2" style="font-size:12px;margin:4px 0 8px">Mezclar: lo que ya tenés se queda y se suma lo que falta. Reemplazar: el proyecto queda igual al del archivo.
+        La genérica siempre se reemplaza y la anterior queda en un respaldo.</div>
+      <div class="xfer"><button class="hbtn" data-m="mezclar">Mezclar</button><button class="hbtn danger" data-m="reemplazar">Reemplazar</button><button class="hbtn" data-m="">Cancelar</button></div>
+    </div>
+    <div id="xDone" class="xfer"></div>`;
+  let file = null;
+  $('#xImp').onclick = () => $('#xFile').click();
+  $('#xFile').onchange = e => { file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    $('#xName').textContent = file.name; $('#xAsk').style.display = ''; $('#xDone').innerHTML = ''; };
+  box.querySelectorAll('[data-m]').forEach(b => b.onclick = async () => {
+    $('#xAsk').style.display = 'none';
+    if (!b.dataset.m || !file) return;
+    try {
+      const r = await fetch('/api/import?modo=' + b.dataset.m, {method: 'POST', headers: {'Content-Type': 'application/zip'}, body: file});
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.ok === false) throw new Error(j.error || `Error ${r.status}`);
+      toast(j.msg); buzz(true);
+      if (j.tipo === 'proyecto' && j.proyecto !== j.actual && sessionName) {
+        $('#xDone').innerHTML = '<button class="hbtn"></button>';
+        const u = $('#xDone').firstChild; u.textContent = `Usar «${j.proyecto}» en esta sesión`;
+        u.onclick = async () => {
+          try { project = await api('/api/project', {method: 'PUT', body: JSON.stringify({project: j.proyecto})}); toast('Proyecto: ' + j.proyecto); }
+          catch (e) { toast(e.message, true); }
+          $('#xDone').innerHTML = ''; await loadLayout(true); renderXfer(); if (document.body.classList.contains('caras')) loadCaras();
+        };
+      }
+      await loadLayout(true); if (document.body.classList.contains('caras')) loadCaras();
+    } catch (e) { toast(e.message, true); }
+  });
 }
 
 /* ---------- parte 2: tracks destino ---------- */
@@ -1244,6 +1630,8 @@ function setView(v) {
   if (v === true) v = 'list'; if (v === false) v = 'pads';
   document.body.classList.toggle('list', v === 'list');
   document.body.classList.toggle('rec', v === 'rec');
+  document.body.classList.toggle('caras', v === 'caras');
+  $('#vCaras').classList.toggle('sel', v === 'caras');
   const wasFolders = foldersMode();
   document.body.classList.toggle('folders', v === 'folders');
   $('#vFolders').classList.toggle('sel', v === 'folders');
@@ -1253,11 +1641,13 @@ function setView(v) {
   ls.set('spotpad.view', v);
   if (v === 'list') refreshList();
   if (v === 'rec') recEnter();
+  if (v === 'caras') loadCaras();
 }
 $('#vPads').onclick = () => setView('pads');
 $('#vList').onclick = () => setView('list');
 $('#vFolders').onclick = () => setView('folders');
 $('#vRec').onclick = () => setView('rec');
+$('#vCaras').onclick = () => setView('caras');
 
 async function refreshList(manual) {
   try {
@@ -1538,9 +1928,8 @@ $('#rrClose').onclick = () => { $('#recRules').close(); recRender(); };
 
 (async () => {
   poll(); setInterval(poll, 4000);
-  presets = (await api('/api/presets')).categories || [];
   renderRecents(); await loadHidden(); await loadLayout(true);
-  if (['rec', 'folders'].includes(ls.get('spotpad.view', 'pads'))) setView(ls.get('spotpad.view'));
+  if (['rec', 'folders', 'caras'].includes(ls.get('spotpad.view', 'pads'))) setView(ls.get('spotpad.view'));
   const pr = await api('/api/prefix'); prefix = pr.prefix; prefixOpts = pr.options; renderSeg();
   await Promise.all([loadTracks(), loadTargets()]); renderTargets();
 })();

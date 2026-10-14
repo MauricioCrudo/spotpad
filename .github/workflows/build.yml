@@ -52,6 +52,7 @@ jobs:
           python test_active.py
           python test_ai.py
           python test_project.py
+          python test_personajes.py
           python test_updater.py
           python test_edicion.py
       - name: Compilar
