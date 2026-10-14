@@ -3,3 +3,5 @@ Pillow>=10
 pynput>=1.7.7
 certifi
 pyobjc-framework-UserNotifications; sys_platform == "darwin"
+pyobjc-framework-Quartz; sys_platform == "darwin"
+pyobjc-framework-Cocoa; sys_platform == "darwin"

@@ -67,6 +67,8 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
 
 - **Nunca usar** `GetEditSelection`, `GetColorPalette` ni `GetExportMixSourceList`: cuelgan o cierran
   Pro Tools 2025.12. Hay tests que lo vigilan (test_edicion.py, test_rec.py).
+- **Nunca usar** `ConsolidateClip`: en la prueba real deja un tono de 1 kHz en vez del audio. Consolidar elige
+  track y rango por el SDK y le manda ⌥⇧3 a Pro Tools (pide permiso de Accesibilidad); test_edicion.py lo vigila.
 - `GetTrackMainOutputAssignments` requiere 2026.04: no disponible.
 - `GetMonitorOutputPath` (salida de monitoreo, para el bounce de Regrabar): **sin probar en el Pro Tools real**. Solo se
   llama cuando se toca «Leer la salida de la sesión (prueba)» en Ajustes, nunca sola. Si cuelga, sacarlo como a los otros.

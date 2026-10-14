@@ -13,6 +13,8 @@ import glob
 import logging
 import os
 import re
+import subprocess
+import sys
 import tempfile
 import time
 import unicodedata
@@ -55,10 +57,67 @@ def first_clip(events, a: int, b: int):
     return min(hits, key=lambda ev: ev.start) if hits else None
 
 
+PT_BUNDLE = "com.avid.ProTools"
+
+
+def _pt_al_frente():
+    """Trae Pro Tools al frente (sin Apple Events: `open -b` no pide permiso de Automatización)."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSWorkspace
+        front = lambda: str(NSWorkspace.sharedWorkspace().frontmostApplication().bundleIdentifier() or "")
+    except Exception:                            # noqa: BLE001
+        front = lambda: ""
+    if front() == PT_BUNDLE:
+        return
+    subprocess.run(["open", "-b", PT_BUNDLE], timeout=5)
+    for _ in range(20):
+        if front() == PT_BUNDLE:
+            return
+        time.sleep(0.1)
+    time.sleep(0.3)
+
+
+def mandar_consolidar():
+    """⌥⇧3 (Consolidate Clip) a Pro Tools, como si se tocara a mano. El comando ConsolidateClip del
+    SDK no sirve: en Pro Tools 2025.12 deja un tono de 1 kHz en vez del audio (visto en la prueba real).
+    Necesita permiso de Accesibilidad (Mac)."""
+    if sys.platform == "darwin":
+        import hotkeys
+        if not hotkeys.mac_trusted():
+            hotkeys.mac_trusted(prompt=True)
+            raise EditError("Consolidar necesita el permiso de Accesibilidad: Ajustes del Sistema → Privacidad y "
+                            "seguridad → Accesibilidad → SpotPad. Después reabrí SpotPad.")
+        import Quartz as Q
+        # Esperar a que se suelten las teclas del atajo (⌃⌥⌘K), si no se suman a ⌥⇧3
+        for _ in range(30):
+            flags = Q.CGEventSourceFlagsState(Q.kCGEventSourceStateHIDSystemState)
+            if not flags & (Q.kCGEventFlagMaskControl | Q.kCGEventFlagMaskCommand |
+                            Q.kCGEventFlagMaskAlternate | Q.kCGEventFlagMaskShift):
+                break
+            time.sleep(0.05)
+        _pt_al_frente()
+        tecla = 20                               # el «3» de la fila de números (igual en teclado español)
+        mods = Q.kCGEventFlagMaskAlternate | Q.kCGEventFlagMaskShift
+        for down in (True, False):
+            ev = Q.CGEventCreateKeyboardEvent(None, tecla, down)
+            Q.CGEventSetFlags(ev, mods)
+            Q.CGEventPost(Q.kCGHIDEventTap, ev)
+            time.sleep(0.03)
+    else:
+        from pynput.keyboard import Controller, Key
+        kb = Controller()
+        with kb.pressed(Key.alt, Key.shift):
+            kb.press("3"); kb.release("3")
+
+
 class EditTools:
     def __init__(self, pt, settings_loader):
         self.pt = pt
         self.settings = settings_loader          # () -> dict con las claves de DEFAULTS
+        self.teclas = mandar_consolidar          # se reemplaza en los tests
+        self.espera = 0.4
 
     def cfg(self):
         return {**DEFAULTS, **{k: v for k, v in (self.settings() or {}).items() if k in DEFAULTS}}
@@ -103,6 +162,16 @@ class EditTools:
             time.sleep(0.15)
         log.warning("Edición: el rango no quedó aplicado (%s-%s)", a, b)
 
+    def _esperar_consolidado(self, e, track, a, b, tol=2):
+        """Espera a que el track tenga un solo clip que cubra todo [a, b] (lo que deja Consolidate Clip).
+        Devuelve su nombre, o None si no pasó. Mientras Pro Tools consolida no contesta: el pedido espera."""
+        for _ in range(25):
+            time.sleep(self.espera)
+            evs = [ev for ev in self._edl(e).get(track, []) if min(ev.end, b) > max(ev.start, a)]
+            if len(evs) == 1 and evs[0].start <= a + tol and evs[0].end >= b - tol:
+                return evs[0].clip
+        return None
+
     def _rename_free(self, e, name):
         """Renombra el clip seleccionado (y su archivo). Si ya hay un archivo con ese nombre
         («That name is already used by another file») prueba «Nombre 2», «Nombre 3»…"""
@@ -123,8 +192,6 @@ class EditTools:
     def consolidate(self):
         if not self.cfg()["enabled"]:
             raise EditError("Las herramientas de edición están apagadas (Ajustes)")
-        from bridge import _op
-        from ptsl import PTSL_pb2 as pt
 
         def f(e):
             if e.transport_state() != "TS_TransportStopped":
@@ -139,13 +206,23 @@ class EditTools:
                     continue
                 name = base_clip_name(ev.clip) or t.name
                 self._apply_selection(e, [t.name], a, b)
-                try:
-                    e.client.run(_op("CId_ConsolidateClip")())
-                except Exception as ex:          # noqa: BLE001 (p. ej. «No clip is selected»)
-                    notes.append(f"«{t.name}»: {ex}")
-                    log.info("Consolidar: %s no se pudo: %s", t.name, ex)
+                self.teclas()                    # ⌥⇧3 en Pro Tools (no el ConsolidateClip del SDK: da un tono)
+                hecho = self._esperar_consolidado(e, t.name, a, b)
+                if hecho is None:
+                    notes.append(f"«{t.name}»: Pro Tools no consolidó (¿estaba Pro Tools al frente?)")
+                    log.info("Consolidar: %s no quedó consolidado", t.name)
                     continue
-                name = self._rename_free(e, name)
+                try:
+                    name = self._rename_free(e, name)
+                except Exception as ex:          # noqa: BLE001
+                    notes.append(f"«{t.name}» consolidado como «{hecho}», sin renombrar: {ex}")
+                    continue
+                # Verificar que el nombre quedó en el clip (y no en otra cosa)
+                ev2 = first_clip(self._edl(e).get(t.name, []), a, b)
+                if ev2 is None or base_clip_name(ev2.clip) != name:
+                    notes.append(f"«{t.name}»: consolidado, pero el clip quedó como «{ev2.clip if ev2 else '?'}»")
+                    log.info("Consolidar: %s → el rename no quedó en el clip (%s)", t.name, ev2.clip if ev2 else None)
+                    continue
                 done.append(name)
                 log.info("Consolidar: %s → «%s»", t.name, name)
             self._reselect(e, [t.name for t in sel], a, b)

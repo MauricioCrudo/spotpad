@@ -55,28 +55,56 @@ def tools(eng, **cfg):
     t._edl = lambda e: eng.edl
     return t
 
-# Consolidar: un track por vez, con el nombre del primer clip, y la selección vuelve a los originales
+# Consolidar: ⌥⇧3 en Pro Tools (no ConsolidateClip del SDK, que deja un tono), un track por vez,
+# con el nombre del primer clip; espera el clip consolidado y verifica el nombre en el EDL.
+def con_teclas(t, eng, falla=()):
+    def teclas():
+        tr = eng.sel[-1][0]
+        if tr in falla:
+            return
+        evs = eng.edl.get(tr, [])
+        eng.edl[tr] = [ev for ev in evs if ev.end <= 100 or ev.start >= 200] + [EdlEvent(tr, tr + "_01", 100, 200)]
+        eng.consolidados = getattr(eng, "consolidados", []) + [tr]
+    t.teclas, t.espera = teclas, 0
+    run0 = eng.client.run
+    def run(op):
+        run0(op)
+        if type(op).__name__ == "CId_RenameSelectedClip":
+            tr = eng.sel[-1][0]
+            eng.edl[tr] = [EdlEvent(tr, op.request.new_name, ev.start, ev.end) if ev.start == 100 else ev
+                           for ev in eng.edl[tr]]
+    eng.client.run = run
+    return t
+
 eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True), T("Video", 0, "v")],
           {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150), EdlEvent("Chairs", "x_04", 150, 220)],
            "Bags": [EdlEvent("Bags", "Prps Bag-01.L", 120, 180)]})
-r = tools(eng).consolidate()
+r = con_teclas(tools(eng), eng).consolidate()
 assert eng.renamed == ["Prps Chair Wood", "Prps Bag"], eng.renamed
-assert eng.ran.count("CId_ConsolidateClip") == 2 and eng.sel[-1] == ["Chairs", "Bags"], (eng.ran, eng.sel)
+assert eng.consolidados == ["Chairs", "Bags"] and "CId_ConsolidateClip" not in eng.ran, eng.ran
+assert eng.sel[-1] == ["Chairs", "Bags"], eng.sel
 
-# Consolidar con el nombre ya usado por otro archivo: «Prps Chair Wood 2»; si un track falla, sigue con el otro
+# Nombre ya usado por otro archivo: «Prps Chair Wood 2»; si un track no se consolida, sigue con el otro y avisa
 eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True)],
           {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150)], "Bags": [EdlEvent("Bags", "Prps Bag", 120, 180)]})
-run0 = eng.client.run
+t = con_teclas(tools(eng), eng, falla=("Bags",))
+run1 = eng.client.run
 def run_usado(op):
-    n = type(op).__name__
-    if n == "CId_RenameSelectedClip" and op.request.new_name == "Prps Chair Wood":
+    if type(op).__name__ == "CId_RenameSelectedClip" and op.request.new_name == "Prps Chair Wood":
         raise Exception("ErrType 100: PT_UnknownError (That name is already used by another file.)")
-    if n == "CId_ConsolidateClip" and eng.sel[-1] == ["Bags"]:
-        raise Exception("ErrType 126: PT_InvalidParameter (No clip is selected)")
-    run0(op)
+    run1(op)
 eng.client.run = run_usado
-r = tools(eng).consolidate()
-assert eng.renamed == ["Prps Chair Wood 2"] and "No clip is selected" in r["msg"], (eng.renamed, r)
+r = t.consolidate()
+assert eng.renamed == ["Prps Chair Wood 2"] and "no consolidó" in r["msg"], (eng.renamed, r)
+
+# El rename no queda en el clip: avisa, no lo da por hecho
+eng = Eng([T("Chairs", 1, "a", sel=True)], {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150)]})
+t = con_teclas(tools(eng), eng)
+eng.client.run = lambda op: None                     # Pro Tools «acepta» el rename pero no cambia el clip
+try:
+    t.consolidate(); raise AssertionError
+except Exception as ex:
+    assert "quedó como" in str(ex), ex
 
 # Apagadas: no hace nada
 from bridge import SpotError
@@ -152,4 +180,5 @@ import pathlib
 for f in ("edicion.py", "bridge.py"):
     code = "\n".join(l for l in pathlib.Path(__file__).with_name(f).read_text("utf-8").splitlines() if not l.strip().startswith("#"))
     assert "GetExportMixSourceList\")" not in code and "GetColorPalette')" not in code, f
+    assert "CId_ConsolidateClip" not in code, f       # deja un tono de 1 kHz en Pro Tools 2025.12
 print("edición OK")
