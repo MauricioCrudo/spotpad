@@ -790,11 +790,30 @@ async function renderEditBox() {
   const m = $('#edMore');
   m.innerHTML = `<div class="k2" style="font-size:13px">Consolidar (⌃⌥⌘K): consolida la selección en el mismo track con el nombre del primer clip.
     Regrabar (⌃⌥⌘J): lo que suena de los tracks seleccionados pasa a un clip en el track de regrabación; después ⌘M mutea los originales.</div>
-    <label class="edf">Track de regrabación<input id="rgTrack" autocomplete="off"></label>
+    <label class="edf">Track de regrabación<select id="rgTrack"></select></label>
     <label class="edf">Salida que escuchás, como figura en Bounce Mix<input id="rgSrc" autocomplete="off" placeholder="p. ej. Out 1-2"></label>
+    <button class="hbtn" id="rgReadOut">Leer la salida de la sesión (prueba)</button>
     <label class="tog"><input type="checkbox" id="rgMono"> Regrabar en mono</label>`;
-  $('#rgTrack').value = editCfg.regrab_track || '';
+  // El track sale de la lista de la sesión; si el guardado no está, se sugiere uno por nombre («Regrabación»)
+  const fillTracks = (names, sug) => {
+    const sel = $('#rgTrack'), cur = editCfg.regrab_track || '';
+    const has = names.some(n => low(n) === low(cur));
+    const opts = [...(cur && !has ? [[cur, cur + (names.length ? ' (no está en esta sesión)' : '')]] : []), ...names.map(n => [n, n])];
+    sel.innerHTML = opts.map(([v, l]) => `<option>${esc3(v)}</option>`).join('');
+    [...sel.options].forEach((o, i) => { o.value = opts[i][0]; o.textContent = opts[i][1]; });
+    sel.value = has ? names.find(n => low(n) === low(cur)) : cur;
+    if (!has && sug) { sel.value = sug; saveEdit({regrab_track: sug}); toast('Track de regrabación: ' + sug); }
+  };
+  fillTracks([], '');
+  api('/api/edit/sesion').then(r => fillTracks(r.tracks || [], r.sugerido)).catch(() => {});
   $('#rgTrack').onchange = e => saveEdit({regrab_track: e.target.value});
+  $('#rgReadOut').onclick = async () => {
+    const b = $('#rgReadOut'); b.disabled = true;
+    try { const r = await api('/api/edit/sesion?salida=1'); $('#rgSrc').value = r.salida; saveEdit({regrab_source: r.salida});
+          toast('Salida: ' + r.salida); buzz(true); }
+    catch (e) { toast(e.message, true); }
+    b.disabled = false;
+  };
   $('#rgMono').checked = editCfg.regrab_mono !== false;
   $('#rgMono').onchange = e => saveEdit({regrab_mono: e.target.checked});
   $('#rgSrc').value = editCfg.regrab_source || '';

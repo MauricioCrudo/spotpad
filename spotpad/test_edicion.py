@@ -91,6 +91,28 @@ try:
     tools(eng2).regrab(); raise AssertionError
 except SpotError as e:
     assert "Regrabación" in str(e)
+# Leer de la sesión: lista de tracks de audio + sugerido; la salida SOLO si se pide
+from ptsl import PTSL_pb2 as ptpb
+assert edicion.sugerir_track(["Pre", "REGRABACIÓN 1", "Rec"]) == "REGRABACIÓN 1"
+assert edicion.sugerir_track(["Pre", "Rerec Fts"]) == "Rerec Fts" and edicion.sugerir_track(["Pre"]) == ""
+def TA(name, idx, ttype="TT_Audio"):
+    t = T(name, idx, name); t.type = ptpb.TrackType.Value(ttype); t.track_attributes.is_inactive = 1; return t
+eng3 = Eng([TA("Dialogos", 2), TA("FOLEY", 0, "TT_BasicFolder"), TA("Regrabación", 3), TA("Pre", 1)], {})
+r = tools(eng3).sesion()
+assert r["tracks"] == ["Pre", "Dialogos", "Regrabación"] and r["sugerido"] == "Regrabación" and "salida" not in r, r
+assert "CId_GetMonitorOutputPath" not in eng3.ran
+run0 = eng3.client.run
+def run_mon(op):
+    run0(op)
+    if type(op).__name__ == "CId_GetMonitorOutputPath":
+        op.response = N(monitor_path="Out 1-2 ")
+eng3.client.run = run_mon
+assert tools(eng3).sesion(salida=True)["salida"] == "Out 1-2"
+eng3.client.run = lambda op: setattr(op, "response", N(monitor_path=""))
+try:
+    tools(eng3).sesion(salida=True); raise AssertionError
+except SpotError as ex:
+    assert "a mano" in str(ex)
 # Nunca GetExportMixSourceList ni GetColorPalette (cuelgan Pro Tools 2025.12)
 import pathlib
 for f in ("edicion.py", "bridge.py"):

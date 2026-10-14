@@ -68,6 +68,8 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
 - **Nunca usar** `GetEditSelection`, `GetColorPalette` ni `GetExportMixSourceList`: cuelgan o cierran
   Pro Tools 2025.12. Hay tests que lo vigilan (test_edicion.py, test_rec.py).
 - `GetTrackMainOutputAssignments` requiere 2026.04: no disponible.
+- `GetMonitorOutputPath` (salida de monitoreo, para el bounce de Regrabar): **sin probar en el Pro Tools real**. Solo se
+  llama cuando se toca «Leer la salida de la sesión (prueba)» en Ajustes, nunca sola. Si cuelga, sacarlo como a los otros.
 - La selección se lee con `GetTimelineSelection` en samples. El estado de clips (incluido mute) sale del
   texto de `ExportSessionInfoAsText` (EDL).
 - Todo pedido pasa por `ProTools._call` (hilo propio con timeout). Si algo cuelga, el log dice qué función lo pidió.
@@ -119,4 +121,4 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
   si el video trae sonido directo.
 - Voz para elegir nombres: buscar una opción mejor que el atajo de iOS (se postergó).
 - Traductor español→inglés de nombres (glosario + Opus-MT): el usuario pidió no implementarlo todavía.
-- Sin probar en el Pro Tools real: personajes/caras y pasos por personaje + calzado (0.16.0), consolidar/regrabar, vista del artista con mutes, notificaciones nativas, indicador de actualización.
+- Sin probar en el Pro Tools real: leer la salida de monitoreo para Regrabar (0.16.2), personajes/caras y pasos por personaje + calzado (0.16.0), consolidar/regrabar, vista del artista con mutes, notificaciones nativas, indicador de actualización.

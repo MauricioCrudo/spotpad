@@ -26,6 +26,15 @@ class EditError(Exception):
     pass
 
 
+def sugerir_track(names) -> str:
+    """El track de regrabación más probable por nombre: «Regrabación», «REGRAB», «Rerec»…"""
+    for want in ("regrabacion", "regrab", "rerec", "re-rec", "re rec"):
+        hit = next((n for n in names if want in _plain(n)), None)
+        if hit:
+            return hit
+    return ""
+
+
 def base_clip_name(name: str) -> str:
     """«Prps Chair Wood_03-01.L» → «Prps Chair Wood» (sin los agregados de Pro Tools)."""
     n = str(name or "").strip()
@@ -114,9 +123,33 @@ class EditTools:
 
     # ---- regrabar en un solo clip ---------------------------------------------- #
     # Ojo: NO usar GetExportMixSourceList. En Pro Tools 2025.12 cuelga y cierra Pro Tools (visto en
-    # la prueba real al abrir Ajustes). La salida se escribe a mano, como figura en Bounce Mix.
-    def sources(self):
-        return {"ok": True, "sources": []}
+    # la prueba real al abrir Ajustes). La salida se lee con GetMonitorOutputPath (la de monitoreo de la
+    # sesión, que es la que escuchás): EN PRUEBA, solo cuando la persona toca el botón, nunca sola.
+    def sesion(self, salida=False):
+        """Tracks de audio activos (para elegir el de regrabación, con uno sugerido por nombre) y,
+        si se pide, la salida de monitoreo de la sesión."""
+        from bridge import _op, is_inactive
+        from ptsl import PTSL_pb2 as pt
+
+        def tipo(t):
+            try:
+                return pt.TrackType.Name(t.type)
+            except Exception:                    # noqa: BLE001
+                return str(t.type)
+
+        def f(e):
+            names = [t.name for t in sorted(e.track_list(), key=lambda t: t.index)
+                     if not is_inactive(t) and "Audio" in tipo(t)]
+            out = {"ok": True, "tracks": names, "sugerido": sugerir_track(names)}
+            if salida:
+                log.info("Regrabar: leyendo la salida de monitoreo (GetMonitorOutputPath, en prueba)")
+                op = _op("CId_GetMonitorOutputPath")()
+                e.client.run(op)
+                out["salida"] = str(getattr(op.response, "monitor_path", "") or "").strip()
+                if not out["salida"]:
+                    raise EditError("Pro Tools no devolvió una salida de monitoreo: escribila a mano")
+            return out
+        return self._run(f, 10)
 
     def regrab(self):
         cfg = self.cfg()
@@ -223,5 +256,6 @@ class MockEditTools(EditTools):
             raise EditError("Las herramientas de edición están apagadas (Ajustes)")
         return {"ok": True, "msg": "«Prps Chair Wood» en Regrabación (mock). Los originales quedan seleccionados: ⌘M los mutea."}
 
-    def sources(self):
-        return {"ok": True, "sources": ["Out 1-2", "Monitor"]}
+    def sesion(self, salida=False):
+        names = ["Pre", "Rec Prps", "Regrabación", "Dialogos"]
+        return {"ok": True, "tracks": names, "sugerido": sugerir_track(names), **({"salida": "Out 1-2"} if salida else {})}

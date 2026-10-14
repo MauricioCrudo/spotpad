@@ -31,7 +31,7 @@ import naming
 import ai_import
 import proyecto
 
-VERSION = "0.16.1"
+VERSION = "0.16.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -2577,9 +2577,11 @@ def make_app(pt, rec=None):
     async def edit_regrab(_):
         return await edit_call(EDIT.regrab)
 
-    @routes.get("/api/edit/sources")
-    async def edit_sources(_):
-        return await edit_call(EDIT.sources)
+    # Track de regrabación y salida, leídos de la sesión (la salida solo si se pide: en prueba)
+    @routes.get("/api/edit/sesion")
+    async def edit_sesion(req):
+        salida = req.query.get("salida") == "1"
+        return await edit_call(lambda: EDIT.sesion(salida))
 
     @routes.put("/api/settings")
     async def put_settings(req):
