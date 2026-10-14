@@ -4,6 +4,9 @@ Herramienta de spotting y grabación de foley para **Pro Tools 2025.12.1** (macO
 (supervisor de foley, Buenos Aires). Hablarle en **español rioplatense**, conciso. Toda la interfaz,
 los mensajes y los comentarios del código van en español.
 
+**Antes de proponer funciones o cambiar la interfaz, leer `docs/WORKFLOW.md`**: cómo es el trabajo de
+spotting y grabación, quién usa cada pantalla y las restricciones (NDA, no colgar Pro Tools, una mano).
+
 ## Qué hay en el repo
 
 ```
