@@ -63,6 +63,21 @@ r = tools(eng).consolidate()
 assert eng.renamed == ["Prps Chair Wood", "Prps Bag"], eng.renamed
 assert eng.ran.count("CId_ConsolidateClip") == 2 and eng.sel[-1] == ["Chairs", "Bags"], (eng.ran, eng.sel)
 
+# Consolidar con el nombre ya usado por otro archivo: «Prps Chair Wood 2»; si un track falla, sigue con el otro
+eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True)],
+          {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150)], "Bags": [EdlEvent("Bags", "Prps Bag", 120, 180)]})
+run0 = eng.client.run
+def run_usado(op):
+    n = type(op).__name__
+    if n == "CId_RenameSelectedClip" and op.request.new_name == "Prps Chair Wood":
+        raise Exception("ErrType 100: PT_UnknownError (That name is already used by another file.)")
+    if n == "CId_ConsolidateClip" and eng.sel[-1] == ["Bags"]:
+        raise Exception("ErrType 126: PT_InvalidParameter (No clip is selected)")
+    run0(op)
+eng.client.run = run_usado
+r = tools(eng).consolidate()
+assert eng.renamed == ["Prps Chair Wood 2"] and "No clip is selected" in r["msg"], (eng.renamed, r)
+
 # Apagadas: no hace nada
 from bridge import SpotError
 try:
@@ -85,6 +100,25 @@ assert eng.spot.dst_track_id == "r" and eng.spot.src_clips == ["clip-1"]
 assert eng.solo[0] == (("DX",), False) and eng.solo[1] == (("Chairs", "Bags"), True)
 assert eng.solo[-2] == (("Chairs", "Bags"), False) and eng.solo[-1] == (("DX",), True)     # como estaba
 assert eng.export.offline_bounce == 3 and eng.export.start_time.location == "100"
+# La salida no es «output»: prueba physical out y después bus
+eng.solo.clear()
+run0 = eng.client.run
+def run_bus(op):
+    if type(op).__name__ == "CId_ExportMix" and op.request.mix_source_list[0].source_type != ptpb0.EMSType_Bus:
+        raise Exception("ErrType 100: PT_UnknownError (None of the specified mix sources are present and in use in the session.)")
+    run0(op)
+from ptsl import PTSL_pb2 as ptpb0
+eng.client.run = run_bus
+tools(eng, regrab_track="Regrabación", regrab_source="Bus 1-2").regrab()
+assert eng.export.mix_source_list[0].source_type == ptpb0.EMSType_Bus
+# Ninguna sirve: mensaje claro y solos restaurados
+eng.solo.clear()
+eng.client.run = lambda op: (_ for _ in ()).throw(Exception("None of the specified mix sources are present")) \
+    if type(op).__name__ == "CId_ExportMix" else run0(op)
+try:
+    tools(eng, regrab_track="Regrabación", regrab_source="Bocinas").regrab(); raise AssertionError
+except SpotError as ex:
+    assert "Bounce Source" in str(ex) and eng.solo[-1] == (("DX",), True), (ex, eng.solo)
 # Sin track de regrabación: avisa
 eng2 = Eng([T("Chairs", 1, "a", sel=True)], {})
 try:

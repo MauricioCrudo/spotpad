@@ -88,6 +88,22 @@ class EditTools:
         except Exception as ex:                  # noqa: BLE001
             log.info("Edición: no pude volver a la selección: %s", ex)
 
+    def _rename_free(self, e, name):
+        """Renombra el clip seleccionado (y su archivo). Si ya hay un archivo con ese nombre
+        («That name is already used by another file») prueba «Nombre 2», «Nombre 3»…"""
+        from bridge import _op
+        from ptsl import PTSL_pb2 as pt
+        for i in range(1, 30):
+            want = name if i == 1 else f"{name} {i}"
+            try:
+                e.client.run(_op("CId_RenameSelectedClip")(new_name=want, rename_file=True,
+                                                           clip_location=pt.CL_Timeline))
+                return want
+            except Exception as ex:              # noqa: BLE001
+                if "already used" not in str(ex):
+                    raise
+        raise EditError(f"Ya hay demasiados archivos llamados «{name}»")
+
     # ---- consolidar ---------------------------------------------------------- #
     def consolidate(self):
         if not self.cfg()["enabled"]:
@@ -109,9 +125,13 @@ class EditTools:
                 name = base_clip_name(ev.clip) or t.name
                 e.select_tracks_by_name([t.name])
                 e.set_timeline_selection(in_time=str(a), out_time=str(b), location_type=pt.TLType_Samples)
-                e.client.run(_op("CId_ConsolidateClip")())
-                e.client.run(_op("CId_RenameSelectedClip")(new_name=name, rename_file=True,
-                                                           clip_location=pt.CL_Timeline))
+                try:
+                    e.client.run(_op("CId_ConsolidateClip")())
+                except Exception as ex:          # noqa: BLE001 (p. ej. «No clip is selected»)
+                    notes.append(f"«{t.name}»: {ex}")
+                    log.info("Consolidar: %s no se pudo: %s", t.name, ex)
+                    continue
+                name = self._rename_free(e, name)
                 done.append(name)
                 log.info("Consolidar: %s → «%s»", t.name, name)
             self._reselect(e, [t.name for t in sel], a, b)
@@ -194,17 +214,36 @@ class EditTools:
                     audio.sample_rate = e.session_sample_rate()
                 except Exception:                # noqa: BLE001 (si no, usa lo del diálogo)
                     pass
-                exp = _op("CId_ExportMix")(
-                    file_name=name, file_type=pt.EMFType_WAV,
-                    mix_source_list=[pt.EM_SourceInfo(source_type=pt.EMSType_Output, name=src)],
-                    audio_info=audio,
-                    location_info=pt.EM_LocationInfo(file_destination=pt.EMFDestination_Directory, directory=tmp,
-                                                     import_after_bounce=pt.TBool_False),
-                    offline_bounce=pt.TBool_True,
-                    start_time=pt.TimelineLocation(location=str(a), time_type=pt.TLType_Samples),
-                    end_time=pt.TimelineLocation(location=str(b), time_type=pt.TLType_Samples))
-                log.info("Regrabar: bounce de %s (%s) %s-%s → %s", ", ".join(sel_names), src, a, b, tmp)
-                e.client.run(exp)
+                # En Bounce Mix la salida puede ser un «output», una «physical out» o un «bus»: el
+                # nombre solo no alcanza. Se prueba en ese orden; si no existe, Pro Tools contesta al
+                # toque «None of the specified mix sources are present» y se pasa al siguiente.
+                tipos = [("output", pt.EMSType_Output), ("physical out", pt.EMSType_PhysicalOut),
+                         ("bus", pt.EMSType_Bus)]
+                err = None
+                for etiqueta, st in tipos:
+                    exp = _op("CId_ExportMix")(
+                        file_name=name, file_type=pt.EMFType_WAV,
+                        mix_source_list=[pt.EM_SourceInfo(source_type=st, name=src)],
+                        audio_info=audio,
+                        location_info=pt.EM_LocationInfo(file_destination=pt.EMFDestination_Directory, directory=tmp,
+                                                         import_after_bounce=pt.TBool_False),
+                        offline_bounce=pt.TBool_True,
+                        start_time=pt.TimelineLocation(location=str(a), time_type=pt.TLType_Samples),
+                        end_time=pt.TimelineLocation(location=str(b), time_type=pt.TLType_Samples))
+                    log.info("Regrabar: bounce de %s (%s «%s») %s-%s → %s",
+                             ", ".join(sel_names), etiqueta, src, a, b, tmp)
+                    try:
+                        e.client.run(exp)
+                        err = None
+                        break
+                    except Exception as ex:      # noqa: BLE001
+                        if "mix source" not in str(ex):
+                            raise
+                        err = ex
+                if err is not None:
+                    raise EditError(f"Pro Tools no encuentra la salida «{src}» (probé output, physical out y bus). "
+                                    "Abrí File → Bounce Mix y copiá en Ajustes el nombre exacto de «Bounce Source»; "
+                                    "los tracks tienen que estar ruteados a esa salida.")
             finally:
                 # Solos como estaban
                 try:
