@@ -88,6 +88,21 @@ class EditTools:
         except Exception as ex:                  # noqa: BLE001
             log.info("Edición: no pude volver a la selección: %s", ex)
 
+    def _apply_selection(self, e, names, a, b):
+        """Selecciona los tracks y el rango, y verifica que quedó. Al cambiar de track con
+        SelectTracksByName, Pro Tools a veces pierde el rango (y Consolidar da «No clip is selected»)."""
+        from ptsl import PTSL_pb2 as pt
+        for _ in range(3):
+            e.select_tracks_by_name(names)
+            e.set_timeline_selection(in_time=str(a), out_time=str(b), location_type=pt.TLType_Samples)
+            try:
+                if tuple(self.pt._selection_samples(e)) == (a, b):
+                    return
+            except Exception:                    # noqa: BLE001
+                return
+            time.sleep(0.15)
+        log.warning("Edición: el rango no quedó aplicado (%s-%s)", a, b)
+
     def _rename_free(self, e, name):
         """Renombra el clip seleccionado (y su archivo). Si ya hay un archivo con ese nombre
         («That name is already used by another file») prueba «Nombre 2», «Nombre 3»…"""
@@ -123,8 +138,7 @@ class EditTools:
                     notes.append(f"«{t.name}» no tiene clips en la selección")
                     continue
                 name = base_clip_name(ev.clip) or t.name
-                e.select_tracks_by_name([t.name])
-                e.set_timeline_selection(in_time=str(a), out_time=str(b), location_type=pt.TLType_Samples)
+                self._apply_selection(e, [t.name], a, b)
                 try:
                     e.client.run(_op("CId_ConsolidateClip")())
                 except Exception as ex:          # noqa: BLE001 (p. ej. «No clip is selected»)
@@ -217,33 +231,51 @@ class EditTools:
                 # En Bounce Mix la salida puede ser un «output», una «physical out» o un «bus»: el
                 # nombre solo no alcanza. Se prueba en ese orden; si no existe, Pro Tools contesta al
                 # toque «None of the specified mix sources are present» y se pasa al siguiente.
+                # La carpeta: Pro Tools (Sys_FileLoc… assertion) no acepta bien la de /var/folders;
+                # se prueba con la ruta real y barra final, y si no, con una carpeta en la Música.
                 tipos = [("output", pt.EMSType_Output), ("physical out", pt.EMSType_PhysicalOut),
                          ("bus", pt.EMSType_Bus)]
-                err = None
-                for etiqueta, st in tipos:
-                    exp = _op("CId_ExportMix")(
-                        file_name=name, file_type=pt.EMFType_WAV,
-                        mix_source_list=[pt.EM_SourceInfo(source_type=st, name=src)],
-                        audio_info=audio,
-                        location_info=pt.EM_LocationInfo(file_destination=pt.EMFDestination_Directory, directory=tmp,
-                                                         import_after_bounce=pt.TBool_False),
-                        offline_bounce=pt.TBool_True,
-                        start_time=pt.TimelineLocation(location=str(a), time_type=pt.TLType_Samples),
-                        end_time=pt.TimelineLocation(location=str(b), time_type=pt.TLType_Samples))
-                    log.info("Regrabar: bounce de %s (%s «%s») %s-%s → %s",
-                             ", ".join(sel_names), etiqueta, src, a, b, tmp)
-                    try:
-                        e.client.run(exp)
-                        err = None
-                        break
-                    except Exception as ex:      # noqa: BLE001
-                        if "mix source" not in str(ex):
+                alt = os.path.join(os.path.expanduser("~"), "Music", "SpotPad-regrab")
+                os.makedirs(alt, exist_ok=True)
+                carpetas = [os.path.realpath(tmp) + "/", alt + "/"]
+                err, hecho = None, False
+                for carpeta in carpetas:
+                    tmp = carpeta
+                    falla_carpeta = False
+                    for etiqueta, st in tipos:
+                        exp = _op("CId_ExportMix")(
+                            file_name=name, file_type=pt.EMFType_WAV,
+                            mix_source_list=[pt.EM_SourceInfo(source_type=st, name=src)],
+                            audio_info=audio,
+                            location_info=pt.EM_LocationInfo(file_destination=pt.EMFDestination_Directory,
+                                                             directory=carpeta, import_after_bounce=pt.TBool_False),
+                            offline_bounce=pt.TBool_True,
+                            start_time=pt.TimelineLocation(location=str(a), time_type=pt.TLType_Samples),
+                            end_time=pt.TimelineLocation(location=str(b), time_type=pt.TLType_Samples))
+                        log.info("Regrabar: bounce de %s (%s «%s») %s-%s → %s",
+                                 ", ".join(sel_names), etiqueta, src, a, b, carpeta)
+                        try:
+                            e.client.run(exp)
+                            hecho = True
+                            break
+                        except Exception as ex:  # noqa: BLE001
+                            m = str(ex)
+                            if "mix source" in m:
+                                err = ex
+                                continue
+                            if "Assertion" in m or "FileLoc" in m:
+                                falla_carpeta = True
+                                err = ex
+                                break
                             raise
-                        err = ex
-                if err is not None:
-                    raise EditError(f"Pro Tools no encuentra la salida «{src}» (probé output, physical out y bus). "
-                                    "Abrí File → Bounce Mix y copiá en Ajustes el nombre exacto de «Bounce Source»; "
-                                    "los tracks tienen que estar ruteados a esa salida.")
+                    if hecho or not falla_carpeta:
+                        break
+                if not hecho:
+                    if err is not None and "mix source" in str(err):
+                        raise EditError(f"Pro Tools no encuentra la salida «{src}» (probé output, physical out y bus). "
+                                        "Abrí File → Bounce Mix y copiá en Ajustes el nombre exacto de «Bounce Source»; "
+                                        "los tracks tienen que estar ruteados a esa salida.")
+                    raise EditError(f"Pro Tools no pudo escribir el bounce en una carpeta temporal: {err}")
             finally:
                 # Solos como estaban
                 try:
