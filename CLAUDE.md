@@ -75,6 +75,9 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
   un clip: marcar su rango en su track (SelectTracksByName + SetTimelineSelection) y `RenameSelectedClip`.
 - `GetClipList` necesita `pagination_request` y su JSON trae campos que el proto de py-ptsl no conoce: parseado
   por py-ptsl devuelve 0 clips; leer `response_body_json` a mano si hace falta.
+- Consolidar (probado en Pro Tools real, 0.16.14): ⌥⇧3, nombre propio del primer clip + «-01», «-02»…; con el
+  Grabber en Object pasa a Selector mientras dura (si no, Pro Tools tarda y el clip nuevo no aparece a tiempo).
+  Con la Mac bloqueada las teclas no llegan a Pro Tools.
 - `GetTrackMainOutputAssignments` requiere 2026.04: no disponible.
 - `GetMonitorOutputPath` (salida de monitoreo, para el bounce de Regrabar): **sin probar en el Pro Tools real**. Solo se
   llama cuando se toca «Leer la salida de la sesión (prueba)» en Ajustes, nunca sola. Si cuelga, sacarlo como a los otros.
@@ -136,4 +139,4 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
   si el video trae sonido directo.
 - Voz para elegir nombres: buscar una opción mejor que el atajo de iOS (se postergó).
 - Traductor español→inglés de nombres (glosario + Opus-MT): el usuario pidió no implementarlo todavía.
-- Sin probar en el Pro Tools real: leer la salida de monitoreo para Regrabar (0.16.2), personajes/caras y pasos por personaje + calzado (0.16.0), consolidar/regrabar, vista del artista con mutes, notificaciones nativas, indicador de actualización.
+- Sin probar en el Pro Tools real: leer la salida de monitoreo para Regrabar (0.16.2), personajes/caras y pasos por personaje + calzado (0.16.0), vista del artista con mutes, notificaciones nativas, indicador de actualización.
