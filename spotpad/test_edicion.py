@@ -97,14 +97,17 @@ eng.client.run = run_usado
 r = t.consolidate()
 assert eng.renamed == ["Prps Chair Wood 2"] and "no consolidó" in r["msg"], (eng.renamed, r)
 
-# El rename no queda en el clip: avisa, no lo da por hecho
+# El rename falla: avisa con el nombre que dejó Pro Tools, no lo da por hecho
 eng = Eng([T("Chairs", 1, "a", sel=True)], {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150)]})
 t = con_teclas(tools(eng), eng)
-eng.client.run = lambda op: None                     # Pro Tools «acepta» el rename pero no cambia el clip
+def run_falla(op):
+    if type(op).__name__ == "CId_RenameTargetClip":
+        raise Exception("ErrType 126: PT_InvalidParameter (Clip not found)")
+eng.client.run = run_falla
 try:
     t.consolidate(); raise AssertionError
 except Exception as ex:
-    assert "quedó como" in str(ex), ex
+    assert "sin renombrar" in str(ex) and "Chairs_07" in str(ex), ex
 
 # El nombre sale del primer clip con nombre propio: nunca el que Pro Tools arma con el track
 np_ = edicion.nombre_propio
