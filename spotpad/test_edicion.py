@@ -31,7 +31,7 @@ class Eng:
                     op.response = N(source_list=["Out 1-2"])
                 if n == "CId_ImportAudioToClipList":
                     op.response = N(file_list=[N(destination_file_list=[N(clip_id_list=["clip-1"])])])
-                if n == "CId_RenameSelectedClip": eng.renamed = getattr(eng, "renamed", []) + [op.request.new_name]
+                if n in ("CId_RenameSelectedClip", "CId_RenameTargetClip"): eng.renamed = getattr(eng, "renamed", []) + [op.request.new_name]
                 if n == "CId_SpotClipsByID": eng.spot = op.request
         s.client = C()
     def transport_state(s): return "TS_TransportStopped"
@@ -63,16 +63,16 @@ def con_teclas(t, eng, falla=()):
         if tr in falla:
             return
         evs = eng.edl.get(tr, [])
-        eng.edl[tr] = [ev for ev in evs if ev.end <= 100 or ev.start >= 200] + [EdlEvent(tr, tr + "_01", 100, 200)]
+        eng.edl[tr] = [ev for ev in evs if ev.end <= 100 or ev.start >= 200] + [EdlEvent(tr, tr + "_07", 100, 200)]
         eng.consolidados = getattr(eng, "consolidados", []) + [tr]
     t.teclas, t.espera, t.limite = teclas, 0, 0.3
     run0 = eng.client.run
     def run(op):
         run0(op)
-        if type(op).__name__ == "CId_RenameSelectedClip":
-            tr = eng.sel[-1][0]
-            eng.edl[tr] = [EdlEvent(tr, op.request.new_name, ev.start, ev.end) if ev.start == 100 else ev
-                           for ev in eng.edl[tr]]
+        if type(op).__name__ == "CId_RenameTargetClip":
+            for tr in eng.edl:
+                eng.edl[tr] = [EdlEvent(tr, op.request.new_name, ev.start, ev.end) if ev.clip == op.request.clip_name
+                               else ev for ev in eng.edl[tr]]
     eng.client.run = run
     return t
 
@@ -90,7 +90,7 @@ eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True)],
 t = con_teclas(tools(eng), eng, falla=("Bags",))
 run1 = eng.client.run
 def run_usado(op):
-    if type(op).__name__ == "CId_RenameSelectedClip" and op.request.new_name == "Prps Chair Wood":
+    if type(op).__name__ == "CId_RenameTargetClip" and op.request.new_name == "Prps Chair Wood":
         raise Exception("ErrType 100: PT_UnknownError (That name is already used by another file.)")
     run1(op)
 eng.client.run = run_usado
@@ -105,6 +105,20 @@ try:
     t.consolidate(); raise AssertionError
 except Exception as ex:
     assert "quedó como" in str(ex), ex
+
+# El nombre sale del primer clip con nombre propio: nunca el que Pro Tools arma con el track
+np_ = edicion.nombre_propio
+assert np_([EdlEvent("Props", "Props_01", 100, 150), EdlEvent("Props", "Campera", 150, 200)], "Props", 100, 200) == "Campera"
+assert np_([EdlEvent("Props", "Props_01-02", 100, 200)], "Props", 100, 200) == ""
+eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Campera", 100, 200)]})
+t = con_teclas(tools(eng), eng)
+r = t.consolidate()
+assert eng.renamed == ["Campera"] and eng.edl["Props"][0].clip == "Campera", (eng.renamed, eng.edl)
+eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Props_01", 100, 200)]})
+try:                                                  # reconsolidar algo sin nombre propio: no lo renombra «Props»
+    con_teclas(tools(eng), eng).consolidate(); raise AssertionError
+except Exception as ex:
+    assert "nombre propio" in str(ex) and not getattr(eng, "renamed", []), ex
 
 # Apagadas: no hace nada
 from bridge import SpotError

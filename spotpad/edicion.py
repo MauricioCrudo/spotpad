@@ -112,6 +112,19 @@ def mandar_consolidar():
             kb.press("3"); kb.release("3")
 
 
+def nombre_propio(events, track, a, b):
+    """Nombre para el consolidado: el del primer clip de la selección que tenga nombre propio.
+    Los que Pro Tools nombra con el track («Props_01», «Prps 01_02», de grabar o de un consolidado
+    anterior) no cuentan: si no, al reconsolidar el clip terminaría llamándose como el track.
+    Devuelve "" si ninguno tiene nombre propio."""
+    hits = sorted((ev for ev in events if min(ev.end, b) > max(ev.start, a)), key=lambda ev: ev.start)
+    for ev in hits:
+        n = base_clip_name(ev.clip)
+        if n and _plain(n) != _plain(track):
+            return n
+    return ""
+
+
 class EditTools:
     def __init__(self, pt, settings_loader):
         self.pt = pt
@@ -179,16 +192,20 @@ class EditTools:
                 return evs[0].clip
         return None
 
-    def _rename_free(self, e, name):
-        """Renombra el clip seleccionado (y su archivo). Si ya hay un archivo con ese nombre
-        («That name is already used by another file») prueba «Nombre 2», «Nombre 3»…"""
+    def _rename_free(self, e, name, actual=""):
+        """Renombra el clip consolidado (y su archivo). Con `actual` (el nombre que le puso Pro Tools)
+        usa RenameTargetClip, que no depende de la selección; si no, el clip seleccionado.
+        Si ya hay un archivo con ese nombre («That name is already used») prueba «Nombre 2», «Nombre 3»…"""
         from bridge import _op
         from ptsl import PTSL_pb2 as pt
         for i in range(1, 30):
             want = name if i == 1 else f"{name} {i}"
             try:
-                e.client.run(_op("CId_RenameSelectedClip")(new_name=want, rename_file=True,
-                                                           clip_location=pt.CL_Timeline))
+                if actual:
+                    e.client.run(_op("CId_RenameTargetClip")(clip_name=actual, new_name=want, rename_file=True))
+                else:
+                    e.client.run(_op("CId_RenameSelectedClip")(new_name=want, rename_file=True,
+                                                               clip_location=pt.CL_Timeline))
                 return want
             except Exception as ex:              # noqa: BLE001
                 if "already used" not in str(ex):
@@ -211,7 +228,7 @@ class EditTools:
                 if ev is None:
                     notes.append(f"«{t.name}» no tiene clips en la selección")
                     continue
-                name = base_clip_name(ev.clip) or t.name
+                name = nombre_propio(edl.get(t.name, []), t.name, a, b)
                 antes = {ev2.clip for ev2 in edl.get(t.name, []) if min(ev2.end, b) > max(ev2.start, a)}
                 self._apply_selection(e, [t.name], a, b)
                 self.teclas()                    # ⌥⇧3 en Pro Tools (no el ConsolidateClip del SDK: da un tono)
@@ -220,11 +237,13 @@ class EditTools:
                     notes.append(f"«{t.name}»: Pro Tools no consolidó (¿estaba Pro Tools al frente?)")
                     log.info("Consolidar: %s no quedó consolidado", t.name)
                     continue
-                # Pro Tools nombra el consolidado como el track («Prps 01_02») y después del atajo el clip
-                # no queda seleccionado para el SDK («No clip is selected»): se vuelve a marcar el rango.
-                self._apply_selection(e, [t.name], a, b)
+                # Pro Tools nombra el consolidado como el track («Props_01»): se renombra por ese nombre
+                # (RenameTargetClip), porque después del atajo el clip no queda seleccionado para el SDK.
+                if not name:
+                    notes.append(f"«{t.name}» consolidado como «{hecho}»: ningún clip tenía nombre propio")
+                    continue
                 try:
-                    name = self._rename_free(e, name)
+                    name = self._rename_free(e, name, hecho)
                 except Exception as ex:          # noqa: BLE001
                     notes.append(f"«{t.name}» consolidado como «{hecho}», sin renombrar: {ex}")
                     continue
