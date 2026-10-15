@@ -66,6 +66,25 @@ def installed_app():
     return exe
 
 
+def verificar_firma(app: Path, new: Path):
+    """Mac: si la app instalada está firmada con el certificado propio de SpotPad (.github/crear_firma.sh),
+    la versión bajada tiene que cumplir su mismo requisito de firma (mismo certificado y mismo
+    identificador). Si no, no se instala: así no entra una descarga alterada ni una app firmada por
+    otro. Con la app instalada sin firma propia (versiones viejas) no hay contra qué comparar."""
+    r = subprocess.run(["codesign", "-d", "-r-", str(app)], capture_output=True, text=True, check=False)
+    m = re.search(r"designated => (.+)", (r.stdout or "") + (r.stderr or ""))
+    req = m.group(1).strip() if m else ""
+    if "certificate leaf" not in req:
+        log.info("Actualizar: la app instalada no tiene firma propia, no verifico la nueva")
+        return
+    v = subprocess.run(["codesign", "--verify", "--deep", "--strict", f"-R={req}", str(new)],
+                       capture_output=True, text=True, check=False)
+    if v.returncode != 0:
+        log.warning("Actualizar: firma rechazada: %s", (v.stderr or v.stdout).strip())
+        raise RuntimeError("la versión bajada no está firmada con el certificado de SpotPad: no la instalo")
+    log.info("Actualizar: firma verificada")
+
+
 class Updater:
     def __init__(self, current: str):
         self.current = current
@@ -155,6 +174,7 @@ class Updater:
             out = tmp / "nueva"
             subprocess.run(["ditto", "-x", "-k", str(zpath), str(out)], check=True)
             new = next(out.glob("*.app"))
+            verificar_firma(app, new)
             if not os.access(app.parent, os.W_OK):
                 raise RuntimeError(f"no tengo permiso para escribir en {app.parent}")
             old = app.with_name(app.stem + " (anterior).app")
