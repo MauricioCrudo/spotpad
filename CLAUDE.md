@@ -32,6 +32,8 @@ spotpad/            App principal (bridge Python + web)
 analizador/         App aparte: analiza el video (SigLIP ONNX), marca escenas y superficies en la sesión vía SpotPad.
 .github/workflows/build.yml   CI: tests → compila Mac (Apple Silicon + Intel) y Windows → publica release «ultima».
 .github/make_dmg.sh           Arma los .dmg de Mac.
+.github/crear_firma.sh        Una vez, a mano: certificado propio + secretos MAC_CERT_P12/MAC_CERT_PASS. El CI firma la
+                              app de Mac con él para que macOS no vuelva a pedir Accesibilidad en cada actualización.
 ```
 
 ## Correr en local

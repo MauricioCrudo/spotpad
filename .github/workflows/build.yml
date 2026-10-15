@@ -57,6 +57,36 @@ jobs:
           python test_edicion.py
       - name: Compilar
         run: pyinstaller --noconfirm spotpad.spec
+      # Firma con el certificado propio (secretos de .github/crear_firma.sh): así macOS reconoce cada versión
+      # como la misma app y no vuelve a pedir el permiso de Accesibilidad. Sin secretos, o si algo falla,
+      # queda la firma ad hoc de siempre: nunca frena una release.
+      - name: Firmar (Mac)
+        if: runner.os == 'macOS'
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASS: ${{ secrets.MAC_CERT_PASS }}
+        run: |
+          if [ -z "$MAC_CERT_P12" ]; then echo "Sin certificado: queda la firma ad hoc"; exit 0; fi
+          set +e
+          KC="$RUNNER_TEMP/firma.keychain-db"; KPW=$(openssl rand -hex 12)
+          echo "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/firma.p12"
+          security create-keychain -p "$KPW" "$KC"
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p "$KPW" "$KC"
+          security import "$RUNNER_TEMP/firma.p12" -k "$KC" -P "$MAC_CERT_PASS" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KPW" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          # Confiar en el certificado solo en esta máquina de compilación (codesign no firma con uno no confiable)
+          security find-certificate -c "SpotPad Firma" -p "$KC" > "$RUNNER_TEMP/cert.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem"
+          if codesign --force --deep --sign "SpotPad Firma" --keychain "$KC" dist/SpotPad.app && codesign --verify --deep dist/SpotPad.app; then
+            codesign -d -r- dist/SpotPad.app
+          else
+            echo "::warning::No se pudo firmar con el certificado propio: queda la firma ad hoc"
+            codesign --force --deep --sign - dist/SpotPad.app
+          fi
+          rm -f "$RUNNER_TEMP/firma.p12"
+          exit 0
       - name: Prueba de arranque (Mac)
         if: runner.os == 'macOS'
         run: SPOTPAD_DATA="$RUNNER_TEMP/sp" dist/SpotPad.app/Contents/MacOS/SpotPad --selftest
