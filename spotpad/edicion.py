@@ -131,7 +131,7 @@ class EditTools:
         self.settings = settings_loader          # () -> dict con las claves de DEFAULTS
         self.teclas = mandar_consolidar          # se reemplaza en los tests
         self.espera = 0.05                       # el pedido igual espera mientras Pro Tools consolida
-        self.limite = 10                         # segundos esperando el consolidado
+        self.limite = 20                         # segundos esperando el consolidado (rangos largos)
 
     def cfg(self):
         return {**DEFAULTS, **{k: v for k, v in (self.settings() or {}).items() if k in DEFAULTS}}
@@ -182,14 +182,17 @@ class EditTools:
 
     def _esperar_consolidado(self, e, track, a, b, antes=(), tol=2):
         """Espera a que el track tenga un solo clip nuevo (que no estaba antes) cubriendo todo [a, b]: lo
-        que deja Consolidate Clip. Devuelve su nombre, o None si no pasó en ~10 s. Mientras Pro Tools
+        que deja Consolidate Clip. Devuelve su nombre, o None si no pasó en `limite` segundos. Mientras Pro Tools
         consolida no contesta: el pedido espera solo."""
         fin, vueltas = time.time() + self.limite, 0
         while time.time() < fin:
             time.sleep(self.espera)
             vueltas += 1
             t = time.time()
-            evs = [ev for ev in self._edl(e, solo_sel=True).get(track, []) if min(ev.end, b) > max(ev.start, a)]
+            clips = self._edl(e, solo_sel=True)
+            if track not in clips:               # el track quedó sin selección: se lee la sesión entera
+                clips = self._edl(e)
+            evs = [ev for ev in clips.get(track, []) if min(ev.end, b) > max(ev.start, a)]
             log.debug("Consolidar: lectura %d del track en %d ms", vueltas, (time.time() - t) * 1000)
             if len(evs) == 1 and evs[0].clip not in antes and evs[0].start <= a + tol and evs[0].end >= b - tol:
                 log.info("Consolidar: clip nuevo «%s» en la lectura %d (última tardó %d ms)",
@@ -256,7 +259,8 @@ class EditTools:
                     notes.append(f"«{t.name}» consolidado como «{hecho}», sin renombrar: {ex}")
                     continue
                 # Verificar que el nombre quedó en el clip consolidado (y no en otro)
-                ev2 = first_clip(self._edl(e, solo_sel=True).get(t.name, []), a, b)
+                clips = self._edl(e, solo_sel=True)
+                ev2 = first_clip((clips if t.name in clips else self._edl(e)).get(t.name, []), a, b)
                 if ev2 is None or base_clip_name(ev2.clip) != name:
                     notes.append(f"«{t.name}»: consolidado, pero el clip quedó como «{ev2.clip if ev2 else '?'}»")
                     log.info("Consolidar: %s → el rename no quedó en el clip (%s)", t.name, ev2.clip if ev2 else None)

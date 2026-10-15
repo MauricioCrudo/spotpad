@@ -124,6 +124,14 @@ try:                                                  # reconsolidar algo sin no
 except Exception as ex:
     assert "nombre propio" in str(ex) and not getattr(eng, "renamed", []), ex
 
+# El track queda sin selección después del atajo: la lectura de «solo seleccionados» no lo trae y se
+# lee la sesión entera (visto en Pro Tools real: consolidaba pero SpotPad no lo veía y no renombraba)
+eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Campera", 100, 200)]})
+t = con_teclas(tools(eng), eng)
+t._edl = lambda e, solo_sel=False: {} if solo_sel else eng.edl
+r = t.consolidate()
+assert eng.renamed == ["Campera"], (eng.renamed, r)
+
 # Apagadas: no hace nada
 from bridge import SpotError
 try:
