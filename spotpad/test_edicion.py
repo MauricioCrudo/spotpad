@@ -80,7 +80,7 @@ eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True), T("Video"
           {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150), EdlEvent("Chairs", "x_04", 150, 220)],
            "Bags": [EdlEvent("Bags", "Prps Bag-01.L", 120, 180)]})
 r = con_teclas(tools(eng), eng).consolidate()
-assert eng.renamed == ["Prps Chair Wood", "Prps Bag"], eng.renamed
+assert eng.renamed == ["Prps Chair Wood-01", "Prps Bag-01"], eng.renamed
 assert eng.consolidados == ["Chairs", "Bags"] and "CId_ConsolidateClip" not in eng.ran, eng.ran
 assert eng.sel[-1] == ["Chairs", "Bags"], eng.sel
 
@@ -90,12 +90,12 @@ eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True)],
 t = con_teclas(tools(eng), eng, falla=("Bags",))
 run1 = eng.client.run
 def run_usado(op):
-    if type(op).__name__ == "CId_RenameSelectedClip" and op.request.new_name == "Prps Chair Wood":
+    if type(op).__name__ == "CId_RenameSelectedClip" and op.request.new_name == "Prps Chair Wood-01":
         raise Exception("ErrType 100: PT_UnknownError (That name is already used by another file.)")
     run1(op)
 eng.client.run = run_usado
 r = t.consolidate()
-assert eng.renamed == ["Prps Chair Wood 2"] and "no consolidó" in r["msg"], (eng.renamed, r)
+assert eng.renamed == ["Prps Chair Wood-02"] and "no consolidó" in r["msg"], (eng.renamed, r)
 
 # El rename falla: avisa con el nombre que dejó Pro Tools, no lo da por hecho
 eng = Eng([T("Chairs", 1, "a", sel=True)], {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150)]})
@@ -116,7 +116,18 @@ assert np_([EdlEvent("Props", "Props_01-02", 100, 200)], "Props", 100, 200) == "
 eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Campera", 100, 200)]})
 t = con_teclas(tools(eng), eng)
 r = t.consolidate()
-assert eng.renamed == ["Campera"] and eng.edl["Props"][0].clip == "Campera", (eng.renamed, eng.edl)
+assert eng.renamed == ["Campera-01"] and eng.edl["Props"][0].clip == "Campera-01", (eng.renamed, eng.edl)
+# Reconsolidar «Campera-01»: sale «Campera-02», no se acumulan números
+eng.edl["Props"] = [EdlEvent("Props", "Campera-01", 100, 150), EdlEvent("Props", "Props_03", 150, 200)]
+eng.renamed = []
+run_r = eng.client.run
+def run_usado01(op):
+    if type(op).__name__ == "CId_RenameSelectedClip" and op.request.new_name == "Campera-01":
+        raise Exception("ErrType 100: PT_UnknownError (That name is already used by another file.)")
+    run_r(op)
+eng.client.run = run_usado01
+t.consolidate()
+assert eng.renamed == ["Campera-02"], eng.renamed
 assert eng.sel.count(["Props"]) >= 2, eng.sel          # se vuelve a marcar el rango antes de renombrar
 eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Props_01", 100, 200)]})
 try:                                                  # reconsolidar algo sin nombre propio: no lo renombra «Props»
@@ -130,7 +141,7 @@ eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Campera"
 t = con_teclas(tools(eng), eng)
 t._edl = lambda e, solo_sel=False: {} if solo_sel else eng.edl
 r = t.consolidate()
-assert eng.renamed == ["Campera"], (eng.renamed, r)
+assert eng.renamed == ["Campera-01"], (eng.renamed, r)
 
 # Apagadas: no hace nada
 from bridge import SpotError

@@ -201,14 +201,15 @@ class EditTools:
         return None
 
     def _rename_free(self, e, name):
-        """Renombra el clip seleccionado en el timeline (y su archivo). Si ya hay un archivo con ese
-        nombre («That name is already used») prueba «Nombre 2», «Nombre 3»…
+        """Renombra el clip seleccionado en el timeline (y su archivo) como «Nombre-01»; si ese archivo
+        ya existe («That name is already used»), «Nombre-02», «Nombre-03»… Como base_clip_name saca el
+        «-NN», reconsolidar «Campera-01» da «Campera-02» (no se acumulan números).
         Ojo: RenameTargetClip (por nombre) no sirve: en Pro Tools 2025.12 contesta «Can't found clip»
         aunque el clip esté en la Clip List (probado en la sesión real)."""
         from bridge import _op
         from ptsl import PTSL_pb2 as pt
-        for i in range(1, 30):
-            want = name if i == 1 else f"{name} {i}"
+        for i in range(1, 100):
+            want = f"{name}-{i:02d}"
             try:
                 e.client.run(_op("CId_RenameSelectedClip")(new_name=want, rename_file=True,
                                                            clip_location=pt.CL_Timeline))
@@ -261,7 +262,7 @@ class EditTools:
                 # Verificar que el nombre quedó en el clip consolidado (y no en otro)
                 clips = self._edl(e, solo_sel=True)
                 ev2 = first_clip((clips if t.name in clips else self._edl(e)).get(t.name, []), a, b)
-                if ev2 is None or base_clip_name(ev2.clip) != name:
+                if ev2 is None or ev2.clip != name:
                     notes.append(f"«{t.name}»: consolidado, pero el clip quedó como «{ev2.clip if ev2 else '?'}»")
                     log.info("Consolidar: %s → el rename no quedó en el clip (%s)", t.name, ev2.clip if ev2 else None)
                     continue
