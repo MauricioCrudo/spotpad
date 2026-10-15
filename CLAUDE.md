@@ -79,6 +79,9 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
 - Consolidar (probado en Pro Tools real, 0.16.14): ⌥⇧3, nombre propio del primer clip + «-01», «-02»…; con el
   Grabber en Object pasa a Selector mientras dura (si no, Pro Tools tarda y el clip nuevo no aparece a tiempo).
   Con la Mac bloqueada las teclas no llegan a Pro Tools.
+- Pro Tools 2024.10 (compu Intel del estudio, «PTSL 5»): no marca `has_edit_selection`. Para saber qué track tiene
+  la selección: `has_edit_selection` → `is_selected` → los tracks del export «solo seleccionados» (edicion._selected).
+  Las herramientas de edición se llaman `ET_…` (sin el `ETool_` de 2025.06+).
 - `GetTrackMainOutputAssignments` requiere 2026.04: no disponible.
 - `GetMonitorOutputPath` (salida de monitoreo, para el bounce de Regrabar): **sin probar en el Pro Tools real**. Solo se
   llama cuando se toca «Leer la salida de la sesión (prueba)» en Ajustes, nunca sola. Si cuelga, sacarlo como a los otros.

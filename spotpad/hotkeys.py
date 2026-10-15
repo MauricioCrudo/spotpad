@@ -110,6 +110,9 @@ def mac_combo(binding: str):
     return key, mods
 
 
+_CARBON = None          # la instancia de CarbonKeys (una sola por proceso)
+
+
 class CarbonKeys:
     """Atajos globales de macOS sin permisos. Las llamadas a Carbon se hacen en el hilo principal."""
 
@@ -384,7 +387,12 @@ class Hotkeys:
             return False
         if sys.platform == "darwin":
             try:
-                ck = CarbonKeys()
+                # Una sola instancia para toda la app: instalar el manejador de Carbon por segunda vez da
+                # -9866 y los atajos caían al método viejo (pide Accesibilidad). Visto al prender la edición.
+                global _CARBON
+                if _CARBON is None:
+                    _CARBON = CarbonKeys()
+                ck = _CARBON
                 mapping = {b: (lambda a=a: self.run_action(a)) for a, b in self.active_bindings().items()}
                 bad = ck.register(mapping)
                 self.listener = ck

@@ -139,8 +139,20 @@ class EditTools:
 
     # ---- utilidades sobre el engine (corren dentro de pt._call) ---------------- #
     def _selected(self, e):
+        """Tracks con la selección de edición. Pro Tools 2024.10 (PTSL 5) no marca has_edit_selection:
+        ahí se usan los tracks seleccionados (is_selected) y, si tampoco, los que trae el export de
+        «tracks seleccionados» (visto en la compu del estudio: el export sí sabía cuál era)."""
         tracks = e.track_list()
         sel = [t for t in tracks if self.pt._is_set(t.track_attributes.has_edit_selection)]
+        if not sel:
+            sel = [t for t in tracks if self.pt._is_set(getattr(t.track_attributes, "is_selected", 0))]
+        if not sel:
+            try:
+                nombres = set(self._edl(e, solo_sel=True))
+            except Exception as ex:              # noqa: BLE001
+                log.info("Edición: no pude leer los tracks seleccionados del export: %s", ex)
+                nombres = set()
+            sel = [t for t in tracks if t.name in nombres]
         if not sel:
             raise EditError("Seleccioná un rango en uno o más tracks primero")
         a, b = self.pt._selection_samples(e)
@@ -193,12 +205,16 @@ class EditTools:
             return ""
 
     def _poner_herramienta(self, e, tool: str):
+        """«ETool_Selector»; los Pro Tools anteriores a 2025.06 solo conocen «ET_Selector»."""
         import json
         from ptsl import PTSL_pb2 as pt
-        try:
-            e.client._send_sync_request(pt.CId_SetEditTool, json.dumps({"edit_tool": tool}))
-        except Exception as ex:                  # noqa: BLE001
-            log.info("Edición: no pude cambiar la herramienta a %s: %s", tool, ex)
+        for nombre in (tool, re.sub(r"^ETool_", "ET_", tool)):
+            try:
+                r = e.client._send_sync_request(pt.CId_SetEditTool, json.dumps({"edit_tool": nombre}))
+                if getattr(r, "header", None) is None or r.header.status != pt.Failed:
+                    return
+            except Exception as ex:              # noqa: BLE001
+                log.info("Edición: no pude cambiar la herramienta a %s: %s", nombre, ex)
 
     def _esperar_consolidado(self, e, track, a, b, antes=(), tol=2):
         """Espera a que el track tenga un solo clip nuevo (que no estaba antes) cubriendo todo [a, b]: lo

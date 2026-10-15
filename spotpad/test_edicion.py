@@ -162,6 +162,20 @@ t.teclas = lambda: (herr_en_teclas.append(herr["actual"]), t0())
 t.consolidate()
 assert herr_en_teclas == ["ETool_Selector"] and herr["cambios"] == ["ETool_Selector", "ETool_GrabberObject"], herr
 
+# Pro Tools 2024.10 (PTSL 5) no marca has_edit_selection: se usa is_selected o el export de seleccionados
+def T5(name, idx, tid, selected=False):
+    return N(name=name, index=idx, id=tid, track_attributes=N(has_edit_selection=0, is_soloed=1,
+                                                             is_selected=3 if selected else 1))
+eng = Eng([T5("Props", 1, "p", selected=True), T5("Otro", 2, "o")], {"Props": [EdlEvent("Props", "Campera", 100, 200)]})
+t = con_teclas(tools(eng), eng)
+t.consolidate()
+assert eng.renamed == ["Campera-01"], eng.renamed
+eng = Eng([T5("Props", 1, "p"), T5("Otro", 2, "o")], {"Props": [EdlEvent("Props", "Campera", 100, 200)]})
+t = con_teclas(tools(eng), eng)
+t._edl = lambda e, solo_sel=False: {"Props": eng.edl["Props"]} if solo_sel else eng.edl
+t.consolidate()
+assert eng.renamed == ["Campera-01"], eng.renamed
+
 # Apagadas: no hace nada
 from bridge import SpotError
 try:
