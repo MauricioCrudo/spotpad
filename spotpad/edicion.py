@@ -130,7 +130,8 @@ class EditTools:
         self.pt = pt
         self.settings = settings_loader          # () -> dict con las claves de DEFAULTS
         self.teclas = mandar_consolidar          # se reemplaza en los tests
-        self.espera = 0.05                       # el pedido igual espera mientras Pro Tools consolida
+        self.primera = 0.3                       # antes de la primera lectura
+        self.espera = 0.25                       # entre lecturas: no saturar a Pro Tools mientras consolida
         self.limite = 20                         # segundos esperando el consolidado (rangos largos)
 
     def cfg(self):
@@ -180,13 +181,34 @@ class EditTools:
             time.sleep(0.15)
         log.warning("Edición: el rango no quedó aplicado (%s-%s)", a, b)
 
+    def _herramienta(self, e) -> str:
+        """Herramienta de edición actual sin prefijo («Selector», «GrabberObject»…); "" si no se pudo leer."""
+        import json
+        from ptsl import PTSL_pb2 as pt
+        try:
+            r = e.client._send_sync_request(pt.CId_GetEditTool, "")
+            return re.sub(r"^ETool_|^ET_", "", json.loads(r.response_body_json or "{}").get("current_setting", ""))
+        except Exception as ex:                  # noqa: BLE001
+            log.info("Edición: no pude leer la herramienta: %s", ex)
+            return ""
+
+    def _poner_herramienta(self, e, tool: str):
+        import json
+        from ptsl import PTSL_pb2 as pt
+        try:
+            e.client._send_sync_request(pt.CId_SetEditTool, json.dumps({"edit_tool": tool}))
+        except Exception as ex:                  # noqa: BLE001
+            log.info("Edición: no pude cambiar la herramienta a %s: %s", tool, ex)
+
     def _esperar_consolidado(self, e, track, a, b, antes=(), tol=2):
         """Espera a que el track tenga un solo clip nuevo (que no estaba antes) cubriendo todo [a, b]: lo
         que deja Consolidate Clip. Devuelve su nombre, o None si no pasó en `limite` segundos. Mientras Pro Tools
         consolida no contesta: el pedido espera solo."""
         fin, vueltas = time.time() + self.limite, 0
+        time.sleep(self.primera)                 # sin pedidos al SDK: Pro Tools procesa el atajo tranquilo
         while time.time() < fin:
-            time.sleep(self.espera)
+            if vueltas:
+                time.sleep(self.espera)
             vueltas += 1
             t = time.time()
             clips = self._edl(e, solo_sel=True)
@@ -225,6 +247,19 @@ class EditTools:
             raise EditError("Las herramientas de edición están apagadas (Ajustes)")
 
         def f(e):
+            # Con el Grabber en Object, Pro Tools tarda en procesar ⌥⇧3 mientras SpotPad lee la sesión
+            # y el clip nuevo no aparece a tiempo (visto en Pro Tools real). Se pasa a Selector mientras
+            # dura y se vuelve a la herramienta que estaba.
+            tool = self._herramienta(e)
+            if tool == "GrabberObject":
+                self._poner_herramienta(e, "ETool_Selector")
+            try:
+                return g(e)
+            finally:
+                if tool == "GrabberObject":
+                    self._poner_herramienta(e, "ETool_GrabberObject")
+
+        def g(e):
             if e.transport_state() != "TS_TransportStopped":
                 raise EditError("Pará Pro Tools primero")
             _tracks, sel, a, b = self._selected(e)

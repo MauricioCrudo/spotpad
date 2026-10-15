@@ -65,7 +65,7 @@ def con_teclas(t, eng, falla=()):
         evs = eng.edl.get(tr, [])
         eng.edl[tr] = [ev for ev in evs if ev.end <= 100 or ev.start >= 200] + [EdlEvent(tr, tr + "_07", 100, 200)]
         eng.consolidados = getattr(eng, "consolidados", []) + [tr]
-    t.teclas, t.espera, t.limite = teclas, 0, 0.3
+    t.teclas, t.espera, t.limite, t.primera = teclas, 0, 0.3, 0
     run0 = eng.client.run
     def run(op):
         run0(op)
@@ -142,6 +142,25 @@ t = con_teclas(tools(eng), eng)
 t._edl = lambda e, solo_sel=False: {} if solo_sel else eng.edl
 r = t.consolidate()
 assert eng.renamed == ["Campera-01"], (eng.renamed, r)
+
+# Con el Grabber en Object: pasa a Selector mientras consolida y vuelve a Object al terminar (aunque falle)
+import json as _json
+eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Campera", 100, 200)]})
+t = con_teclas(tools(eng), eng)
+herr = {"actual": "ET_GrabberObject", "cambios": []}
+def sync(cmd, body):
+    if cmd == ptpb_e.CId_GetEditTool:
+        return types.SimpleNamespace(response_body_json=_json.dumps({"current_setting": herr["actual"]}))
+    if cmd == ptpb_e.CId_SetEditTool:
+        herr["actual"] = _json.loads(body)["edit_tool"]; herr["cambios"].append(herr["actual"])
+        return types.SimpleNamespace(response_body_json="")
+from ptsl import PTSL_pb2 as ptpb_e
+eng.client._send_sync_request = sync
+herr_en_teclas = []
+t0 = t.teclas
+t.teclas = lambda: (herr_en_teclas.append(herr["actual"]), t0())
+t.consolidate()
+assert herr_en_teclas == ["ETool_Selector"] and herr["cambios"] == ["ETool_Selector", "ETool_GrabberObject"], herr
 
 # Apagadas: no hace nada
 from bridge import SpotError
