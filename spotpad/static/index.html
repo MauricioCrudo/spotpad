@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="es">
 <head>
+<script src="/pair.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -45,7 +46,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 /* ===== Cabecera ===== */
-header{display:flex;align-items:center;gap:10px;padding:12px 16px;flex:none}
+header{display:flex;align-items:center;gap:10px;padding:8px 16px;flex:none}
 .conn{display:flex;align-items:center;gap:10px;flex:1;min-width:0;background:none;border:0;text-align:left;padding:4px 0}
 .brand{font-weight:700;font-size:16px;letter-spacing:-.01em}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
@@ -82,18 +83,18 @@ body.offline #reconBtn{display:inline-block}
 .views .badge:empty{display:none}
 
 /* ===== Paneles ===== */
-main,#viewList,#viewRec{flex:1;min-height:0;padding:0 16px calc(16px + var(--tab-h) + env(safe-area-inset-bottom))}
+main,#viewList,#viewRec{flex:1;min-height:0;padding:0 12px calc(10px + var(--tab-h) + env(safe-area-inset-bottom))}
 main{display:grid;grid-template-columns:1fr;gap:14px}
-section{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;min-height:0;box-shadow:var(--shadow)}
+section{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:10px 12px;display:flex;flex-direction:column;min-height:0;box-shadow:var(--shadow)}
 h2{margin:0 0 12px;font-size:15px;font-weight:650;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:8px}
 h2 b{color:var(--accent);font-weight:600}
 .empty{color:var(--dim);font-size:14px;padding:14px 2px;line-height:1.5}
 
 /* ===== Botonera ===== */
-.toolbar{display:flex;align-items:flex-start;gap:6px;margin-bottom:10px;min-width:0}
+.toolbar{display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;min-width:0}
 main > section,#viewRec > section{min-width:0}
 .cats{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
-.cats2{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;min-width:0}
+.cats2{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 8px;min-width:0}
 .cats2:empty{display:none}
 .cats2 .cat{padding:6px 12px 6px 10px;font-size:13px;display:inline-flex;align-items:center;gap:7px;border-style:solid}
 .cats2 .cat::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--cc,var(--accent));flex:none}
@@ -102,6 +103,23 @@ main > section,#viewRec > section{min-width:0}
 .cats2 .cat.preset:not(.sel){border-style:solid}
 .cat{flex:none;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--dim);font-size:14px;font-weight:550}
 .cat.sel{color:var(--on-accent);background:var(--cc,var(--accent));border-color:transparent;font-weight:650}
+.cat.grupo{border-style:dashed}
+.cat.grupo.sel{border-style:solid}
+.cat.sel2{color:var(--cc,var(--accent));border-color:var(--cc,var(--accent));box-shadow:inset 0 0 0 1px var(--cc,var(--accent));font-weight:650}
+.cat{-webkit-touch-callout:none;user-select:none}
+.junta + .junta{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+/* En fila: un solo renglón corrido; entre categorías, una tira chica vertical con el nombre y el color */
+.junta-fila{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}
+.junta-fila .jin,.junta-fila .jin .grid,.junta-fila .jin .tgrid{display:contents}
+.junta-fila .pad,.junta-fila .tpad{flex:0 0 118px;min-width:0}
+.junta-fila .jin .fbar,.junta-fila .jin .ghead,.junta-fila .jin .cathint{flex:1 0 100%}
+.jsep{flex:none;align-self:stretch;width:22px;min-height:70px;display:flex;align-items:center;justify-content:center;
+  writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--cc,var(--dim));border-right:3px solid var(--cc,var(--accent));border-radius:0 2px 2px 0;padding:4px 0;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:default;-webkit-user-select:none;user-select:none}
+.jsep.quitable{cursor:pointer}
+.jhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 8px;font-size:13px;font-weight:650;
+  color:var(--cc,var(--dim));text-transform:uppercase;letter-spacing:.04em}
 .cat.preset:not(.sel){border-style:dashed}
 .cat.hiddentab:not(.sel){border-style:dotted}
 .cat.add{border-style:dashed;color:var(--dim)}
@@ -157,8 +175,8 @@ body.editing .fbar,.fbar.always{display:flex}
 .fbar span{flex:1}
 
 /* Dock inferior de la botonera: REF, Escena, Deshacer */
-.dock{display:flex;gap:8px;padding-top:12px;margin-top:auto;border-top:1px solid var(--line)}
-.dock button{flex:1;min-height:52px;border-radius:14px;border:1px solid var(--line);background:var(--raised);color:var(--text);
+.dock{display:flex;gap:8px;padding-top:8px;margin-top:auto;border-top:1px solid var(--line)}
+.dock button{flex:1;min-height:46px;border-radius:14px;border:1px solid var(--line);background:var(--raised);color:var(--text);
   font-size:15px;font-weight:600;box-shadow:var(--shadow)}
 .dock button:active{background:var(--press)}
 #refBtn{flex:1.3;letter-spacing:.06em;font-weight:750;font-size:16px}
@@ -315,6 +333,10 @@ body.rec #viewRec{display:grid;grid-template-columns:330px 1fr}
 .frow::-webkit-scrollbar{display:none}
 .frow:last-child{margin-bottom:0}
 .frow[data-r=s]{flex-wrap:wrap;overflow:visible}
+.frow.wrap{flex-wrap:wrap;overflow:visible}
+.fpick .fsub{font-size:11px;color:var(--faint);margin:2px 2px 4px;text-transform:uppercase;letter-spacing:.04em}
+.fchar.add{border-style:dashed;color:var(--dim);background:none}
+.fchar.edit{border-style:dashed;border-color:var(--accent)}
 .fchar{flex:none;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--raised);border-radius:999px;
   padding:4px 14px 4px 4px;font-weight:600;font-size:15px;min-height:46px}
 .fchar.plain{padding:4px 14px}
@@ -371,14 +393,17 @@ body.caras #viewCaras{display:flex}
   main{display:flex;flex-direction:column;overflow:auto}
   main > section:first-child{min-height:calc(100vh - 140px)}
   .grid,.tgrid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+  .junta-fila .pad,.junta-fila .tpad{flex:1 1 calc(33.3% - 8px)}
   .dock{position:sticky;bottom:calc(-12px);background:var(--surface);margin:0 -12px -12px;padding:10px 12px 12px;border-radius:0 0 16px 16px}
-  .dock button{min-height:50px}
+  .dock button{min-height:46px}
   .rmain{order:-1}
   .rs{overflow:visible}
   body.rec #viewRec{display:flex;flex-direction:column}
   body.rec #viewRec > section{flex:none}
   #editBtn .tx{display:none}
   .cats .cat{padding:7px 12px;font-size:13px}
+  .cats{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}   /* una sola fila que se desliza */
+  .cats::-webkit-scrollbar{display:none}
   /* Categorías: dos filas que se deslizan de costado, en vez de ocupar media pantalla */
   .cats2{display:grid;grid-auto-flow:column;grid-template-rows:auto auto;grid-auto-columns:max-content;
     overflow-x:auto;scrollbar-width:none;margin:-2px -12px 10px;padding:0 12px;scroll-padding:12px}
@@ -553,6 +578,8 @@ body.caras #viewCaras{display:flex}
   <div class="dhead"><b>Ajustes</b><button class="hbtn" id="statClose">Cerrar</button></div>
   <div class="themes"><div class="tl">Tema</div><div class="tlist" id="themeList"></div></div>
   <div class="themes" id="xferBox"></div>
+  <div class="themes" id="layoutBox"></div>
+  <div class="themes" id="pairBox"></div>
   <div class="themes" id="editBox"></div>
   <div class="st" id="stBody"></div>
   <div class="sbtns">
@@ -853,7 +880,7 @@ async function renderStat() {
     renderStat();
   };
 }
-$('#conn').onclick = $('#gearBtn').onclick = () => { renderThemes(); renderXfer(); renderEditBox(); $('#stat').showModal(); renderStat(); };
+$('#conn').onclick = $('#gearBtn').onclick = () => { renderThemes(); renderXfer(); renderLayoutBox(); renderPairBox(); renderEditBox(); $('#stat').showModal(); renderStat(); };
 $('#statClose').onclick = () => $('#stat').close();
 $('#reconBtn').onclick = reconnect;
 $('#stRecon').onclick = reconnect;
@@ -902,7 +929,8 @@ function allTabs() {
     // Botonera: solo categorías (superficies, pasos, props por track) + las preseteadas + el proyecto
     const kinds = (layout.kinds || []).map(k => ({...k, groups: k.groups.map(visTracks).filter(g => g.tracks.length)}))
                                       .filter(k => k.groups.length);
-    return [...kinds.map(k => ({key: 'k:' + k.kind, label: k.label, kind: 'folder', kindTab: true, tab: {name: k.label, groups: k.groups}})),
+    return [...(presetData.grupos || []).map(g => ({key: 'g:' + g.id, label: g.label, kind: 'grupo', grupo: g})),
+            ...kinds.map(k => ({key: 'k:' + k.kind, label: k.label, kind: 'folder', kindTab: true, tab: {name: k.label, groups: k.groups}})),
             ...presets.map(p => ({key: 'p:' + p.id, label: p.label, kind: 'preset', cat: p, hiddenTab: !!p.oculta})),
             ...(project && project.session ? [{key: 'j:proyecto', kind: 'project',
                 label: '★ ' + project.project + ' (' + project.tracks.reduce((n, g) => n + g.names.length, 0) + ')'}] : [])];
@@ -946,9 +974,31 @@ function renderCats() {
   }
   allTabs().forEach(t => {
     const b = document.createElement('button');
-    b.className = 'cat ' + t.kind + (t.hiddenTab ? ' hiddentab' : '') + (t.key === tabKey ? ' sel' : ''); b.textContent = t.label;
+    const junta = !editing && t.key !== tabKey && juntas().includes(t.key);
+    b.className = 'cat ' + t.kind + (t.hiddenTab ? ' hiddentab' : '') + (t.key === tabKey ? ' sel' : '') + (junta ? ' sel2' : '');
+    b.textContent = t.label;
     if (t.cat) b.style.setProperty('--cc', t.cat.color);
-    b.onclick = () => { tabKey = t.key; ls.set(tabStore(), tabKey); $('#clipName').value = ''; renderCats(); renderGrid(); loadLayout(true); };
+    let lp = 0;
+    const sumar = () => { const on = toggleJunta(t.key); toast(on ? `«${t.label}» se muestra junto con la elegida` : `«${t.label}» ya no se muestra junto`); };
+    if (!editing && t.kind !== 'grupo') {
+      b.addEventListener('pointerdown', () => { lp = setTimeout(() => { lp = -1; sumar(); }, 550); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { if (lp > 0) clearTimeout(lp); }));
+      b.oncontextmenu = e => e.preventDefault();
+    }
+    b.onclick = e => {
+      if (lp === -1) { lp = 0; return; }                       // fue pulsación larga
+      if (!editing && (e.shiftKey || e.metaKey) && t.key !== tabKey && t.kind !== 'grupo') return sumar();
+      if (junta) {                                             // ya está a la vista: ir a su sección
+        const sec = document.querySelector(`.junta[data-key="${CSS.escape(t.key)}"]`);
+        if (sec) sec.scrollIntoView({behavior: 'smooth', block: 'start'});
+        return;
+      }
+      tabKey = t.key; ls.set(tabStore(), tabKey); $('#clipName').value = ''; renderCats(); renderGrid(); loadLayout(true);
+      if (!editing && !ls.get('spotpad.juntasVisto', false)) {
+        ls.set('spotpad.juntasVisto', true);
+        toast('Tip: mantené apretada otra categoría para verla junto a esta');
+      }
+    };
     (t.kind === 'preset' ? c2 : c).append(b);       // categorías preseteadas en su propia fila
   });
   const selc = c2.querySelector('.sel');             // en el teléfono la fila se desliza: mostrar la elegida
@@ -968,10 +1018,105 @@ function renderCats() {
     a.onclick = () => openCat(null); c2.append(a);
   }
 }
+// Varias categorías a la vez: mantené apretada una categoría (o ⇧/⌘ + clic en la compu) para sumarla
+// debajo de la elegida; queda fija hasta que la saques. Se guarda en este dispositivo.
+const juntasStore = () => tabStore() + '.juntas';
+const juntas = () => ls.get(juntasStore(), []);
+function toggleJunta(key) {
+  const j = juntas(), on = !j.includes(key);
+  ls.set(juntasStore(), on ? [...j, key] : j.filter(k => k !== key));
+  if (!ls.get('spotpad.juntasVisto', false)) ls.set('spotpad.juntasVisto', true);
+  renderCats(); renderGrid(); buzz(true);
+  return on;
+}
 function renderGrid() {
   const w = $('#gwrap'), t = allTabs().find(t => t.key === tabKey); w.innerHTML = '';
-  $('#namebar').style.display = $('#recents').style.display = (t && t.kind === 'folder' && !t.inactiveTab) ? '' : 'none';
+  const tabOf = k => allTabs().find(x => x.key === k && x.kind !== 'grupo');
+  const base = !t ? [] : t.kind === 'grupo' ? t.grupo.keys.map(tabOf).filter(Boolean) : [t];
+  const extra = editing ? [] : juntas().filter(k => k !== tabKey && !base.some(b => b.key === k)).map(tabOf).filter(Boolean);
+  const todas = [...base, ...extra];
+  $('#namebar').style.display = $('#recents').style.display =
+    todas.some(x => x.kind === 'folder' && !x.inactiveTab) ? '' : 'none';
   if (!t) { w.innerHTML = '<div class="empty">No encontré carpetas con tracks en la sesión.</div>'; return; }
+  if (t.kind === 'grupo' && editing) return renderGrupoEdit(w, t);
+  if (todas.length === 1 && t.kind !== 'grupo') return renderTabInto(w, t);
+  if (!todas.length) { w.innerHTML = '<div class="empty">Las categorías de este grupo no están en esta sesión.</div>'; return; }
+  if (extra.length) {                 // varias a la vista: se pueden guardar como grupo con nombre
+    const bar = document.createElement('div'); bar.className = 'fbar always';
+    bar.innerHTML = '<span></span><button class="hbtn" data-a="g">Guardar como grupo</button>';
+    bar.firstChild.textContent = `${todas.length} categorías juntas.`;
+    bar.querySelector('[data-a=g]').onclick = async () => {
+      const r = await ask({title: 'Grupo de categorías', label: 'Nombre del grupo', hint: 'Queda como una pestaña más: «Tecnología», «Mesa».'});
+      if (!r || !r.name.trim()) return;
+      const keys = todas.map(x => x.key), g = {id: '', label: r.name.trim(), keys};
+      try { applyPresets(await api('/api/presets/grupos', {method: 'PUT', body: JSON.stringify({grupos: [...(presetData.grupos || []), g]})}));
+            const nuevo = (presetData.grupos || []).find(x => x.label === g.label);
+            ls.set(juntasStore(), []); if (nuevo) { tabKey = 'g:' + nuevo.id; ls.set(tabStore(), tabKey); }
+            renderCats(); renderGrid(); toast(`Grupo «${g.label}» guardado`); }
+      catch (e) { toast(e.message, true); }
+    };
+    w.append(bar);
+  }
+  if (juntasModo() === 'fila') {      // en fila: todos los botones seguidos, un separador con el nombre entre categorías
+    const grid = document.createElement('div'); grid.className = 'junta-fila'; w.append(grid);
+    todas.forEach(x => {
+      const sep = document.createElement('div'); sep.className = 'jsep'; sep.dataset.key = x.key;
+      if (x.cat) sep.style.setProperty('--cc', x.cat.color);
+      sep.textContent = x.label;
+      if (extra.includes(x)) {            // tocar la tira saca esa categoría
+        sep.classList.add('quitable'); sep.title = `Tocá para sacar «${x.label}»`;
+        sep.onclick = () => { toggleJunta(x.key); toast(`«${x.label}» ya no se muestra junto`); };
+      }
+      grid.append(sep);
+      const tmp = document.createElement('div');
+      renderTabInto(tmp, x);
+      // los botones de la categoría pasan a la misma grilla (display:contents en sus contenedores)
+      tmp.classList.add('jin'); grid.append(tmp);
+    });
+    return;
+  }
+  todas.forEach((x, i) => {
+    const sec = document.createElement('div'); sec.className = 'junta'; sec.dataset.key = x.key;
+    const h = document.createElement('div'); h.className = 'jhead';
+    if (x.cat) h.style.setProperty('--cc', x.cat.color);
+    h.innerHTML = '<span></span>'; h.firstChild.textContent = x.label;
+    if (extra.includes(x)) {
+      const q = document.createElement('button'); q.className = 'hbtn'; q.textContent = 'Sacar';
+      q.onclick = () => { toggleJunta(x.key); toast(`«${x.label}» ya no se muestra junto`); };
+      h.append(q);
+    }
+    const inner = document.createElement('div');
+    sec.append(h, inner); w.append(sec);
+    renderTabInto(inner, x);
+  });
+}
+function renderGrupoEdit(w, t) {
+  const g = t.grupo, box = document.createElement('div'); box.className = 'fbar always';
+  box.innerHTML = '<span></span><button class="hbtn" data-a="r">Renombrar</button><button class="hbtn" data-a="d">Borrar grupo</button>';
+  box.firstChild.textContent = `Grupo «${g.label}» (genérica): tocá una categoría para sumarla o sacarla.`;
+  const save = async lst => { try { applyPresets(await api('/api/presets/grupos', {method: 'PUT', body: JSON.stringify({grupos: lst})}));
+                                    if (!allTabs().find(x => x.key === tabKey)) tabKey = null; renderCats(); renderGrid(); }
+                              catch (e) { toast(e.message, true); } };
+  const otros = () => (presetData.grupos || []).filter(x => x.id !== g.id);
+  box.querySelector('[data-a=d]').onclick = () => { if (confirm(`¿Borrar el grupo «${g.label}»? Las categorías no se tocan.`)) save(otros()); };
+  box.querySelector('[data-a=r]').onclick = async () => {
+    const r = await ask({title: 'Grupo de categorías', label: 'Nombre', value: g.label});
+    if (r && r.name.trim()) save([...otros(), {...g, label: r.name.trim()}]);
+  };
+  const lista = document.createElement('div'); lista.className = 'frow wrap';
+  allTabs().filter(x => x.kind !== 'grupo').forEach(x => {
+    const b = document.createElement('button'); const on = g.keys.includes(x.key);
+    b.className = 'cat ' + (on ? 'sel' : ''); b.textContent = x.label; if (x.cat) b.style.setProperty('--cc', x.cat.color);
+    b.onclick = () => {
+      const keys = on ? g.keys.filter(k => k !== x.key) : [...g.keys, x.key];
+      if (keys.length < 2) return toast('Un grupo necesita al menos dos categorías', true);
+      save([...(presetData.grupos || []).map(y => y.id === g.id ? {...g, keys} : y)]);
+    };
+    lista.append(b);
+  });
+  w.append(box, lista);
+}
+function renderTabInto(w, t) {
   if (t.kind === 'preset') return renderPresetGrid(w, t.cat);
   if (t.kind === 'project') return renderProjectGrid(w);
   // Barra de edición: ocultar la carpeta entera (o, en Ocultos, explicar cómo volver)
@@ -989,7 +1134,12 @@ function renderGrid() {
     bar.querySelector('[data-a=new]').onclick = () => createTrackIn(layout.tabs.find(x => x.name === t.tab.name) || t.tab);
   }
   w.append(bar);
-  if (t.key === 'k:footsteps' && !editing) { const fp = ftsPicker(); if (fp) w.append(fp); }
+  if (t.key === 'k:footsteps') {       // Pasos: personaje → calzado; los tracks quedan en la vista Carpetas
+    bar.remove();
+    const fp = ftsPicker();
+    w.append(fp || Object.assign(document.createElement('div'), {className: 'cathint', textContent: 'Abrí una sesión con la carpeta de pasos'}));
+    return;
+  }
   const caraT = trackFaces();
   let n = 0;
   t.tab.groups.forEach(g => {
@@ -1311,38 +1461,92 @@ function trackFaces() {
   ((layout.personajes || {}).personajes || []).forEach(p => { if (p.track && p.cara) out[p.track] = p; });
   return out;
 }
-// Pasos: tocás el personaje (queda elegido) y después el calzado → el clip va al track que corresponde
+// Pasos: tocás el personaje (queda elegido) y después el calzado → el clip va al track que corresponde.
+// Personajes: principales (con cara y track propio), genéricos (de la genérica, se editan en ✎ Editar) y
+// los que se suman con «+ Otro» (quedan en el proyecto; se borran con pulsación larga).
+// Sin track propio va al primer track libre de ese calzado (SNEAKERS 01, 02…); si no hay, se crea otro.
 function ftsPicker() {
   const P = layout.personajes;
   if (!P) return null;
   const prin = P.personajes.filter(p => p.track || p.id);
-  const extra = ls.get('spotpad.ftsExtra', []);
-  const sec = [...P.secundarios, ...extra.filter(n => !P.secundarios.includes(n) && !prin.some(p => low(p.nombre) === low(n)))];
-  if (!prin.length && !sec.length && !P.calzados.length) return null;
+  const gen = [...(P.genericos || [])], ext = [...(P.extras || [])];
+  // Lo que se agregaba antes con «+ Otro» quedaba solo en este dispositivo: se pasa al proyecto una vez
+  const viejos = ls.get('spotpad.ftsExtra', []);
+  if (viejos.length && P.proyecto) {
+    ls.set('spotpad.ftsExtra', []);
+    viejos.forEach(n => api('/api/personajes/extras', {method: 'POST', body: JSON.stringify({nombre: n})}).catch(() => {}));
+    viejos.forEach(n => { if (![...gen, ...ext].some(x => low(x) === low(n))) ext.push(n); });
+  }
   let sel = ls.get('spotpad.ftsChar', '');
   const box = document.createElement('div'); box.className = 'fpick';
-  box.innerHTML = '<div class="lbl2">Personaje</div><div class="frow" data-r="c"></div><div class="lbl2" data-l="s"></div><div class="frow" data-r="s"></div>';
+  box.innerHTML = '<div class="lbl2">Personaje</div><div data-r="c"></div><div class="lbl2" data-l="s"></div><div class="frow" data-r="s"></div>';
   const rc = box.querySelector('[data-r=c]'), rs = box.querySelector('[data-r=s]');
+  const saveGen = async lst => {
+    try { const r = await api('/api/personajes/genericos', {method: 'PUT', body: JSON.stringify({genericos: lst})});
+          gen.splice(0, gen.length, ...r.genericos); draw(); }
+    catch (e) { toast(e.message, true); }
+  };
   const draw = () => {
     rc.innerHTML = ''; rs.innerHTML = '';
     const pick = n => { sel = low(sel) === low(n) ? '' : n; ls.set('spotpad.ftsChar', sel); draw(); buzz(true); };
+    const row = (titulo, items) => {
+      if (!items.length) return null;
+      const h = document.createElement('div'); h.className = 'fsub'; h.textContent = titulo;
+      const r = document.createElement('div'); r.className = 'frow wrap'; rc.append(h, r); return r;
+    };
+    const chip = (n, cls) => {
+      const b = document.createElement('button'); b.className = 'fchar ' + cls + (low(sel) === low(n) ? ' sel' : '');
+      b.textContent = n; b.onclick = () => pick(n); return b;
+    };
+    const rp = row('Principales', prin);
     prin.forEach(p => {
       const b = document.createElement('button'); b.className = 'fchar' + (low(sel) === low(p.nombre) ? ' sel' : '');
-      b.append(faceEl(p), document.createTextNode(p.nombre)); b.onclick = () => pick(p.nombre); rc.append(b);
+      b.append(faceEl(p), document.createTextNode(p.nombre)); b.onclick = () => pick(p.nombre); rp.append(b);
     });
-    sec.forEach(n => {
-      const b = document.createElement('button'); b.className = 'fchar plain' + (low(sel) === low(n) ? ' sel' : '');
-      b.textContent = n; b.onclick = () => pick(n); rc.append(b);
+    const rg = row('Genéricos', editing ? [1] : gen);
+    if (rg) {
+      gen.forEach(n => {
+        const b = chip(n, 'plain');
+        if (editing) { b.classList.add('edit'); b.textContent = n + '  ×'; b.onclick = () => saveGen(gen.filter(x => x !== n)); }
+        rg.append(b);
+      });
+      if (editing) {
+        const a = document.createElement('button'); a.className = 'fchar plain add'; a.textContent = '+ Genérico';
+        a.onclick = async () => {
+          const r = await ask({title: 'Personaje genérico', label: 'Nombre', hint: 'Para todos los proyectos: «Old Man», «Kid».'});
+          if (r && r.name.trim()) saveGen([...gen, r.name.trim()]);
+        };
+        rg.append(a);
+      }
+    }
+    const re_ = row('Agregados', [1]);
+    ext.forEach(n => {
+      const b = chip(n, 'plain');
+      let t = 0;
+      const borrar = async () => {
+        if (!confirm(`¿Sacar «${n}» de la lista de este proyecto?`)) return;
+        try { await api('/api/personajes/extras?n=' + encodeURIComponent(n), {method: 'DELETE'});
+              ext.splice(ext.indexOf(n), 1); if (low(sel) === low(n)) { sel = ''; ls.set('spotpad.ftsChar', ''); } draw(); }
+        catch (e) { toast(e.message, true); }
+      };
+      b.addEventListener('pointerdown', () => { t = setTimeout(() => { t = -1; borrar(); }, 650); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { if (t > 0) clearTimeout(t); }));
+      b.onclick = e => { if (t === -1) { t = 0; e.preventDefault(); return; } pick(n); };
+      b.oncontextmenu = e => e.preventDefault();
+      if (editing) { b.textContent = n + '  ×'; b.onclick = borrar; }
+      re_.append(b);
     });
-    const o = document.createElement('button'); o.className = 'fchar plain'; o.textContent = '+ Otro';
+    const o = document.createElement('button'); o.className = 'fchar plain add'; o.textContent = '+ Otro';
     o.onclick = async () => {
-      const r = await ask({title: 'Personaje', label: 'Nombre (va como nombre del clip)', hint: 'Secundarios y extras: «Sonia», «Extra Left».'});
+      const r = await ask({title: 'Personaje', label: 'Nombre (va como nombre del clip)', hint: 'Secundarios y extras: «Sonia», «Taxista». Queda en la lista del proyecto.'});
       if (!r || !r.name.trim()) return;
-      const n = r.name.trim(); ls.set('spotpad.ftsExtra', [n, ...extra.filter(x => low(x) !== low(n))].slice(0, 20));
-      if (!sec.some(x => low(x) === low(n))) sec.unshift(n);
+      const n = r.name.trim();
+      try { const j = await api('/api/personajes/extras', {method: 'POST', body: JSON.stringify({nombre: n})});
+            ext.splice(0, ext.length, ...j.extras.filter(x => !gen.some(g => low(g) === low(x)))); }
+      catch (e) { toast(e.message, true); if (!ext.some(x => low(x) === low(n))) ext.push(n); }
       sel = n; ls.set('spotpad.ftsChar', n); draw();
     };
-    rc.append(o);
+    re_.append(o);
     const p = prin.find(x => low(x.nombre) === low(sel));
     box.querySelector('[data-l=s]').textContent = sel ? `Calzado de ${sel} → se marca` : 'Calzado (elegí primero el personaje)';
     let shoes = P.calzados.map(c => c.label);
@@ -1350,13 +1554,14 @@ function ftsPicker() {
     if (p && p.track && p.calzado) shoes = [p.calzado, ...shoes.filter(x => low(x) !== low(p.calzado))];
     shoes.forEach(label => {
       const own = p && p.track && p.calzado && low(label) === low(p.calzado);
-      const b = document.createElement('button'); b.className = 'fshoe' + (own ? ' own' : ''); b.disabled = !sel;
+      const b = document.createElement('button'); b.className = 'fshoe' + (own ? ' own' : ''); b.disabled = !sel || editing;
       b.innerHTML = esc3(label) + (own ? '<small>el de siempre</small>' : (p && p.track ? '<small>en su track</small>' : ''));
       b.onclick = async () => {
         if (b.classList.contains('busy')) return;
         b.classList.add('busy');
         try { const r = await api('/api/fts/group', {method: 'POST', body: JSON.stringify({personaje: sel, calzado: own ? '' : label, ref: useRef()})});
-              flash(b, true); toast(r.msg); }
+              flash(b, true); toast(r.msg);
+              if (/track nuevo/.test(r.msg || '')) loadLayout(true); }
         catch (e) { flash(b, false); toast(e.message, true); }
         b.classList.remove('busy');
       };
@@ -1492,6 +1697,56 @@ $('#pjDelete').onclick = async () => {
   try { await api('/api/personajes/' + encodeURIComponent(pjCtx.p.id), {method: 'DELETE'}); $('#edPj').close(); loadCaras(); loadLayout(true); }
   catch (e) { toast(e.message, true); }
 };
+
+// Ajustes → cómo se ven las categorías juntas: una debajo de otra, o seguidas en el mismo renglón
+// (con un separador con su nombre). Es del dispositivo: el iPad y el celu pueden usar cada una la suya.
+const juntasModo = () => ls.get('spotpad.juntasModo', 'fila');
+function renderLayoutBox() {
+  const box = $('#layoutBox'), m = juntasModo();
+  box.innerHTML = `<div class="tl">Categorías juntas (este dispositivo)</div>
+    <div class="k2" style="font-size:13px">Cuando mostrás varias categorías a la vez (mantené apretada una categoría) y en los grupos.</div>
+    <div class="tlist" id="jmList"></div>`;
+  [['fila', 'En fila', 'Siguen una después de otra con un separador: entran más por pantalla.'],
+   ['abajo', 'Una debajo de otra', 'Cada categoría en su bloque, con su título.']].forEach(([k, l, t]) => {
+    const b = document.createElement('button'); b.className = 'tbtn' + (m === k ? ' sel' : ''); b.textContent = l; b.title = t;
+    b.onclick = () => { ls.set('spotpad.juntasModo', k); renderLayoutBox(); renderGrid(); };
+    box.querySelector('#jmList').append(b);
+  });
+}
+
+// Ajustes → emparejamiento de dispositivos (el código se ve y se cambia desde la Mac)
+async function renderPairBox() {
+  const box = $('#pairBox');
+  let me = null; try { me = await api('/api/pair/me'); } catch { return; }
+  if (!me.local) {
+    box.innerHTML = `<div class="tl">Emparejamiento</div><div class="k2" style="font-size:13px">${me.enabled
+      ? 'Este dispositivo está emparejado. El código y los dispositivos se ven en SpotPad, en la Mac.'
+      : 'Apagado: cualquier dispositivo de la red puede usar SpotPad.'}</div>`;
+    return;
+  }
+  let d; try { d = await api('/api/pair/info'); } catch { return; }
+  const fmt = t => t ? new Date(t * 1000).toLocaleString('es-AR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) : '';
+  box.innerHTML = `<div class="tl">Emparejamiento de dispositivos</div>
+    <div class="k2" style="font-size:13px">${d.enabled ? 'Prendido: cada iPad, celu o compu escribe este código una vez.' :
+      'Apagado: cualquier dispositivo de la red puede usar SpotPad.'}</div>
+    ${d.enabled ? `<div style="font:700 34px ui-monospace,Menlo,monospace;letter-spacing:.3em;margin:8px 0;color:var(--accent)">${esc3(d.code)}</div>` : ''}
+    <div class="xfer"><button class="hbtn" id="pOn">${d.enabled ? 'Apagar' : 'Prender'}</button>
+      ${d.enabled ? '<button class="hbtn" id="pNew">Código nuevo</button>' : ''}
+      ${d.devices.length ? '<button class="hbtn" id="pAll">Olvidar todos</button>' : ''}</div>
+    ${d.devices.map(x => `<div class="k2" style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px">
+      <span style="flex:1">${esc3(x.name)} <span style="color:var(--faint)">· ${fmt(x.last)}</span></span>
+      <button class="hbtn" data-q="${esc3(x.id)}">Quitar</button></div>`).join('')}`;
+  const put = async body => { try { await api('/api/pair/config', {method: 'PUT', body: JSON.stringify(body)}); renderPairBox(); }
+                              catch (e) { toast(e.message, true); } };
+  box.querySelector('#pOn').onclick = () => put({enabled: !d.enabled});
+  const nw = box.querySelector('#pNew'); if (nw) nw.onclick = () => { if (confirm('¿Código nuevo? Los dispositivos ya emparejados siguen funcionando.')) put({new_code: true}); };
+  const al = box.querySelector('#pAll');
+  if (al) al.onclick = async () => { if (!confirm('¿Olvidar todos los dispositivos? Van a tener que escribir el código de nuevo.')) return;
+                                     try { await api('/api/pair/devices', {method: 'DELETE'}); renderPairBox(); } catch (e) { toast(e.message, true); } };
+  box.querySelectorAll('[data-q]').forEach(b => b.onclick = async () => {
+    try { await api('/api/pair/devices/' + encodeURIComponent(b.dataset.q), {method: 'DELETE'}); renderPairBox(); } catch (e) { toast(e.message, true); }
+  });
+}
 
 // Ajustes → llevar el proyecto (o la genérica) a otra computadora
 function renderXfer() {

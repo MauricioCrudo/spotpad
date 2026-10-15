@@ -13,3 +13,11 @@ spotpad/.first_run_done
 spotpad/ia_ultimo.json
 analizador/modelo/
 analizador/build_icon.png
+spotpad/proyectos/
+spotpad/proyectos.json
+spotpad/dispositivos.json
+spotpad/hidden.json
+spotpad/footsteps.json
+spotpad/rec.json
+spotpad/analizador.json
+.claude/launch.json

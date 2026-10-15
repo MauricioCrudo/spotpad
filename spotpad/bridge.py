@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import re
+import uuid
 import shutil
 import socket
 import sys
@@ -31,7 +32,7 @@ import naming
 import ai_import
 import proyecto
 
-VERSION = "0.16.14"
+VERSION = "0.17.0"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -697,6 +698,22 @@ class ProTools:
             return self._group_on(e, target, name)
         return self._call(f)
 
+    def ocupacion(self, track_names):
+        """Rango marcado (samples) y clips de esos tracks: {"rango": (a, b), "clips": {track: [(ini, fin)]}}.
+        Para no poner dos personajes en el mismo track de calzado a la vez."""
+        want = {n.strip().lower() for n in track_names}
+
+        def f(e):
+            a, b = self._selection_samples(e)
+            if b <= a:
+                raise SpotError("Marcá una región primero")
+            bld = e.export_session_as_text()
+            bld.include_track_edls(); bld.time_type("samples"); bld.dont_show_crossfades()
+            edl = parse_session_text(bld.export_string())
+            return {"rango": (a, b), "clips": {t: [(ev.start, ev.end) for ev in evs]
+                                               for t, evs in edl.items() if t.strip().lower() in want}}
+        return self._call(f, timeout=20)
+
     def group_on_named(self, track_name: str, name: str = ""):
         """Igual, pero el track se busca por nombre (botones preseteados con track asignado)."""
         def f(e):
@@ -1195,6 +1212,7 @@ class MockProTools:
         self._last = "Hands grab body"
         self._off = {"t20", "t38"}      # inactivos: IA Dudas y Group (grabado completo)
         self.ai_log, self._ai_edl, self._ai_marks, self._extra_tracks = [], {}, [], []
+        self._extra_fts, self._ocup = [], {}     # tracks de calzado creados y clips de pasos (mock)
         self.ai_delay = 0.0
         self._dudas = 1                 # 0 = la sesión todavía no tiene el track IA Dudas
 
@@ -1236,6 +1254,8 @@ class MockProTools:
              [F(30, "Footsteps"), T(31, "Henry", 30, "#3E9B4F"), T(32, "Sonia", 30, "#C9567A"),
               T(33, "Male Shoes", 30, "#3E9B4F"), T(34, "Femme Shoes", 30, "#C9567A"), T(35, "Sneakers", 30, "#3B7DD8"),
               T(36, "Boots", 30, "#8A5A2B"), T(37, "Barefoot", 30), T(38, "Group", 30)] + \
+             [{"id": f"y{k}", "name": n, "index": 39 + k, "type": "TT_Audio", "color": "", "parent_id": "f30",
+               "parent_name": "", "inactive": False} for k, n in enumerate(self._extra_fts)] + \
              [F(50, "Props"), F(51, "Hands", ), T(52, "Hands Body", 51), T(53, "Hands Surfaces", 51)] + \
              [T(54 + k, n, 50) for k, n in enumerate(
                   ["Movements", "Movement Clothes", "Chairs", "Bags", "Accessories and Bijou", "Cell Phones", "Glass Bottles", "Keyboards",
@@ -1303,6 +1323,7 @@ class MockProTools:
             raise SpotError("Ese track ya no existe en la sesión")
         clip = (name or t["name"]).strip()
         self._last = clip
+        self._ocup.setdefault(t["name"], []).append((1000, 2000))
         return {"ok": True, "msg": f"«{clip}» en {t['name']} (mock)", "track": t["name"], "clip": clip}
 
     def health(self):
@@ -1375,7 +1396,14 @@ class MockProTools:
     def color_palette(self):
         return {"ok": True, "colors": []}
 
+    def ocupacion(self, track_names):
+        return {"rango": (1000, 2000), "clips": {t: list(self._ocup.get(t, [])) for t in track_names}}
+
     def create_track(self, name, after_track, color_index=-1):
+        fts = ["Henry", "Sonia", "Male Shoes", "Femme Shoes", "Sneakers", "Boots", "Barefoot", "Group"] + self._extra_fts
+        if after_track in fts:
+            self._extra_fts.append(name.strip())        # en la carpeta de pasos
+            return {"ok": True, "msg": f"Track «{name}» creado (mock)", "track": name.strip()}
         self._extra_tracks.append(name.strip())         # aparece en la carpeta de superficies
         return {"ok": True, "msg": f"Track «{name}» creado (mock)", "track": name.strip()}
 
@@ -1977,7 +2005,7 @@ class RecController:
 #  Nombres del proyecto: lo que se escribe a mano en la botonera queda para repetirlo
 # --------------------------------------------------------------------------- #
 _NOISE = {"ep", "cap", "capitulo", "capítulo", "episodio", "reel", "rollo", "foley", "spotting", "spot", "fx", "sfx", "rec", "grabacion", "grabación", "sesion", "sesión",
-          "session", "mix", "final", "copy", "copia"}
+          "session", "mix", "final", "copy", "copia", "recovered", "recuperada", "recuperado", "bak", "backup"}
 
 
 def default_project(session: str) -> str:
@@ -2078,6 +2106,114 @@ def with_ref(name: str) -> str:
     name = (name or "").strip()
     return name if naming.has_ref(name) else (f"{name} REF" if name else "REF")
 CURRENT = {"session": ""}       # sesión abierta (la actualiza /api/status)
+class Pairing:
+    """Emparejamiento de dispositivos: sin él, cualquiera en la red local usa el bridge (botonera, consolidar…).
+    Prendido por defecto. Un código de 4 dígitos (el que muestra el menú de SpotPad) se ingresa una vez en
+    cada iPad/celu/compu y queda una cookie; desde esta misma Mac (localhost) no se pide nada.
+    Los tokens se guardan con hash en dispositivos.json; el código y el interruptor, ahí también."""
+    ABIERTAS = {"/api/health", "/api/pair", "/api/pair/me"}
+    INTENTOS_IP, INTENTOS_TOTAL, BLOQUEO = 5, 25, 600      # fallos por IP / en total / segundos de bloqueo
+
+    def __init__(self, path):
+        self.path, self.lock = Path(path), threading.Lock()
+        self.fails, self.glob, self.vistos = {}, [], {}
+        self.d = self._cargar()
+
+    def _cargar(self):
+        d = load_json(self.path, {})
+        d.setdefault("enabled", True)
+        d.setdefault("devices", [])
+        if not re.fullmatch(r"\d{4}", str(d.get("code", ""))):
+            d["code"] = self._nuevo_codigo()
+            self._guardar(d)
+        return d
+
+    @staticmethod
+    def _nuevo_codigo():
+        import secrets
+        return f"{secrets.randbelow(10000):04d}"
+
+    def _guardar(self, d=None):
+        d = d or self.d
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(d, indent=1, ensure_ascii=False), "utf-8")
+            tmp.replace(self.path)
+        except OSError as e:
+            log.warning("Emparejamiento: no pude guardar: %s", e)
+
+    @staticmethod
+    def _hash(token):
+        import hashlib
+        return hashlib.sha256(str(token).encode()).hexdigest()
+
+    @staticmethod
+    def es_local(req) -> bool:
+        r = req.remote or ""
+        return r in ("127.0.0.1", "::1") or r == lan_ip()
+
+    def autorizado(self, req) -> bool:
+        if not self.d["enabled"] or self.es_local(req):
+            return True
+        tok = req.cookies.get("spotpad_dev") or req.headers.get("X-SpotPad-Token") or ""
+        if not tok:
+            return False
+        h = self._hash(tok)
+        dev = next((x for x in self.d["devices"] if x["hash"] == h), None)
+        if dev and time.time() - self.vistos.get(h, 0) > 60:      # «visto por última vez», sin escribir a cada pedido
+            self.vistos[h] = time.time()
+            dev["last"] = int(time.time())
+            self._guardar()
+        return dev is not None
+
+    def emparejar(self, req, codigo, nombre):
+        """Devuelve (token, error)."""
+        import secrets
+        ip, ahora = req.remote or "?", time.time()
+        with self.lock:
+            self.glob = [t for t in self.glob if ahora - t < self.BLOQUEO]
+            f = self.fails.get(ip, [])
+            f = [t for t in f if ahora - t < self.BLOQUEO]
+            self.fails[ip] = f
+            if len(f) >= self.INTENTOS_IP or len(self.glob) >= self.INTENTOS_TOTAL:
+                return None, "Demasiados intentos: esperá unos minutos (o pedí un código nuevo desde el menú de SpotPad en la Mac)"
+            if not secrets.compare_digest(str(codigo or "").strip(), self.d["code"]):
+                f.append(ahora); self.glob.append(ahora)
+                return None, "Ese código no es: está en el menú de SpotPad, en la Mac"
+            self.fails[ip] = []
+            tok = secrets.token_urlsafe(32)
+            nombre = re.sub(r"\s+", " ", str(nombre or "")).strip()[:40] or "Dispositivo"
+            self.d["devices"].append({"id": secrets.token_hex(4), "hash": self._hash(tok), "name": nombre,
+                                      "created": int(ahora), "last": int(ahora)})
+            self._guardar()
+            log.info("Emparejamiento: «%s» (%s)", nombre, ip)
+            return tok, None
+
+    def info(self):
+        return {"enabled": self.d["enabled"], "code": self.d["code"],
+                "devices": [{k: v for k, v in x.items() if k != "hash"} for x in self.d["devices"]]}
+
+    def set_enabled(self, on: bool):
+        with self.lock:
+            self.d["enabled"] = bool(on)
+            self._guardar()
+        log.info("Emparejamiento: %s", "prendido" if on else "apagado")
+
+    def nuevo_codigo(self):
+        with self.lock:
+            self.d["code"] = self._nuevo_codigo()
+            self.fails.clear(); self.glob.clear()
+            self._guardar()
+        return self.d["code"]
+
+    def quitar(self, dev_id=None):
+        with self.lock:
+            self.d["devices"] = [] if dev_id is None else [x for x in self.d["devices"] if x["id"] != dev_id]
+            self._guardar()
+
+
+PAIR = None                     # se crea con la carpeta de datos (en main / tests)
 UPDATER = None                  # actualizador (lo pone la app de la barra de menú)
 EDIT = None                     # herramientas de edición (consolidar / regrabar), aparte del resto
 ON_SETTINGS = None              # la app reactiva los atajos cuando cambian los ajustes
@@ -2093,6 +2229,10 @@ def make_app(pt, rec=None):
             return web.json_response(await loop.run_in_executor(None, fn, *args))
         except SpotError as e:
             return web.json_response({"ok": False, "error": str(e)}, status=409)
+
+    async def run_plain(fn, *args):
+        """Como run, pero devuelve el resultado (las SpotError suben)."""
+        return await asyncio.get_running_loop().run_in_executor(None, fn, *args)
 
     @routes.get("/")
     async def index(_):
@@ -2119,10 +2259,16 @@ def make_app(pt, rec=None):
 
     @routes.get("/conectar")
     async def conectar(req):
+        if not Pairing.es_local(req):                  # con el código a la vista, solo desde esta Mac
+            return web.Response(status=403, text="Esta página se abre desde SpotPad, en la Mac.")
         url = ipad_url(req.app["port"])
         aurl = url + "/artista"
-        return web.Response(content_type="text/html",
-                            text=CONNECT_PAGE.format(url=url, qr=qr_svg(url), aurl=aurl, aqr=qr_svg(aurl)))
+        pr = PAIR if PAIR is not None else Pairing(DATA / "dispositivos.json")
+        con = pr.d["enabled"]
+        qr, aqr = qr_svg(url + "/?par=" + pr.d["code"] if con else url), qr_svg(aurl + "?par=" + pr.d["code"] if con else aurl)
+        return web.Response(content_type="text/html", text=CONNECT_PAGE.format(
+            url=url, qr=qr, aurl=aurl, aqr=aqr,
+            codigo=(f'<p>Código para escribir a mano: <code>{pr.d["code"]}</code></p>' if con else "")))
 
     @routes.get("/api/status")
     async def status(_):
@@ -2164,6 +2310,27 @@ def make_app(pt, rec=None):
         data["categories"] = clean["categories"]
         PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
         log.info("Presets guardados desde el iPad (%s categorías)", len(clean["categories"]))
+        return web.json_response(presets_proyecto())
+
+    # Grupos de categorías («Tecnología» = Cell phones + Computers…): pestañas que muestran varias juntas.
+    # Son de la genérica (presets.json → «grupos»): {id, label, keys: ["p:<id>", "k:props", …]}
+    @routes.put("/api/presets/grupos")
+    async def put_grupos(req):
+        lst = (await req.json()).get("grupos")
+        if not isinstance(lst, list):
+            return web.json_response({"ok": False, "error": "Falta la lista"}, status=400)
+        grupos = []
+        for g in lst[:30]:
+            if not isinstance(g, dict):
+                continue
+            label = re.sub(r"\s+", " ", str(g.get("label", ""))).strip()[:40]
+            keys = [str(k)[:80] for k in (g.get("keys") or []) if re.fullmatch(r"[kpj]:.+", str(k))][:20]
+            gid = re.sub(r"[^A-Za-z0-9_-]", "", str(g.get("id") or "")) or uuid.uuid4().hex[:8]
+            if label and len(keys) >= 2:
+                grupos.append({"id": gid, "label": label, "keys": keys})
+        data = load_json(PRESETS_FILE, {}); data["grupos"] = grupos
+        PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
+        log.info("Grupos de categorías: %s", [g["label"] for g in grupos])
         return web.json_response(presets_proyecto())
 
     # Botonera del proyecto: agregados y ocultos sobre la genérica (la genérica no se toca)
@@ -2292,7 +2459,7 @@ def make_app(pt, rec=None):
                        if naming.classify_fts(t["name"], load_rules())["type"] == "shoe"}
         sec = [n for g in (PROJECTS.view(CURRENT["session"])["tracks"] if CURRENT["session"] else [])
                if g["track"] in shoe_tracks for n in g["names"]]
-        v = proyecto.vista_personajes(d, fts, load_rules(), sec)
+        v = proyecto.vista_personajes(d, fts, load_rules(), sec, load_rules().get("genericos"))
         v["session"] = CURRENT["session"]
         return v
 
@@ -2380,17 +2547,66 @@ def make_app(pt, rec=None):
         nombre = str(body.get("personaje", "")).strip()
         p = next((x for x in (STORE.load(proj)["personajes"] if proj else [])
                   if naming.norm(nombre) in {naming.norm(n) for n in [x["nombre"], *x.get("alias", [])]}), None)
+        rules = load_rules()
+        alias = (p or {}).get("alias", ())
         try:
-            dst = proyecto.fts_destino(nombre, body.get("calzado", ""), fts, load_rules(),
-                                       alias=(p or {}).get("alias", ()))
+            dst = proyecto.fts_destino(nombre, body.get("calzado", ""), fts, rules, alias=alias)
+            if not dst["principal"]:      # dos personajes del mismo calzado a la vez → otro track
+                oc = await run_plain(pt.ocupacion, proyecto.tracks_de_calzado(body.get("calzado", ""), fts, rules))
+                dst = proyecto.fts_destino(nombre, body.get("calzado", ""), fts, rules, alias=alias,
+                                           ocupados=oc["clips"], rango=oc["rango"])
         except ValueError as e:
             return web.json_response({"ok": False, "error": str(e)}, status=409)
-        tid = next(t["id"] for t in fts if t["name"] == dst["track"])
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
         clip = with_ref(dst["clip"]) if body.get("ref") else dst["clip"]
-        resp = await run(pt.group_on_track, tid, clip)
-        if resp.status == 200 and not dst["principal"] and CURRENT["session"]:
-            PROJECTS.add(CURRENT["session"], dst["track"], nombre)      # queda como secundario del proyecto
+        creado = ""
+        if dst.get("crear"):
+            try:
+                creado = (await run_plain(pt.create_track, dst["crear"], dst["despues_de"]))["track"]
+            except SpotError as e:
+                return web.json_response({"ok": False, "error": f"No pude crear «{dst['crear']}»: {e}"}, status=409)
+            log.info("Pasos: «%s» ocupado, creo «%s»", dst["despues_de"], creado)
+            resp = await run(pt.group_on_named, creado, clip)
+        else:
+            tid = next(t["id"] for t in fts if t["name"] == dst["track"])
+            resp = await run(pt.group_on_track, tid, clip)
+        if resp.status == 200 and not dst["principal"]:
+            if CURRENT["session"]:
+                PROJECTS.add(CURRENT["session"], creado or dst["track"], nombre)   # nombre escrito a mano
+            if proj and naming.norm(nombre) not in {naming.norm(g) for g in rules.get("genericos", proyecto.GENERICOS)}:
+                STORE.agregar_extra(proj, nombre)                                 # queda en la lista de Pasos
+        if resp.status == 200 and creado:
+            data = json.loads(resp.body)
+            data["msg"] = f"{data.get('msg', '')} · track nuevo «{creado}» (ponele el color del calzado)"
+            return web.json_response(data)
         return resp
+
+    @routes.post("/api/personajes/extras")
+    async def extra_add(req):
+        try:
+            ex = STORE.agregar_extra(proj_o_error(), (await req.json()).get("nombre", ""))
+        except (ValueError, SpotError) as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+        return web.json_response({"ok": True, "extras": ex})
+
+    @routes.delete("/api/personajes/extras")
+    async def extra_del(req):
+        try:
+            ex = STORE.quitar_extra(proj_o_error(), req.query.get("n", ""))
+        except SpotError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=409)
+        return web.json_response({"ok": True, "extras": ex})
+
+    @routes.put("/api/personajes/genericos")
+    async def genericos_put(req):
+        lst = (await req.json()).get("genericos")
+        if not isinstance(lst, list):
+            return web.json_response({"ok": False, "error": "Falta la lista"}, status=400)
+        lst = list(dict.fromkeys(re.sub(r"\s+", " ", str(x)).strip()[:60] for x in lst if str(x).strip()))
+        user = load_json(RULES_FILE, {}); user["genericos"] = lst
+        RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
+        return web.json_response({"ok": True, "genericos": lst})
 
     # ---- Exportar / importar (archivo .spotpad) --------------------------- #
     def descarga(data: bytes, nombre: str):
@@ -2779,7 +2995,7 @@ def make_app(pt, rec=None):
     @routes.put("/api/rec/rules")
     async def rec_put_rules(req):
         body = await req.json(); user = load_json(RULES_FILE, {})
-        for k in ("color_shoes", "char_shoes", "surface_alias", "shoes", "folders", "title_case_caps"):
+        for k in ("color_shoes", "char_shoes", "surface_alias", "shoes", "folders", "title_case_caps", "genericos"):
             if k in body:
                 user[k] = body[k]
         RULES_FILE.write_text(json.dumps(user, indent=2, ensure_ascii=False), "utf-8")
@@ -2803,11 +3019,91 @@ def make_app(pt, rec=None):
     async def undo(_):
         return await run(pt.undo)
 
-    app = web.Application()
+    # ---- Emparejamiento de dispositivos ------------------------------------ #
+    def pair():
+        global PAIR
+        if PAIR is None:
+            PAIR = Pairing(DATA / "dispositivos.json")
+        return PAIR
+
+    def solo_local(req):
+        if not Pairing.es_local(req):
+            raise web.HTTPForbidden(text=json.dumps({"ok": False, "error": "Esto se cambia desde SpotPad, en la Mac"}),
+                                    content_type="application/json")
+
+    @web.middleware
+    async def guardia(request, handler):
+        p = request.path
+        if p.startswith("/api/") and p not in Pairing.ABIERTAS and not pair().autorizado(request):
+            return web.json_response({"ok": False, "pair": True, "error": "Falta emparejar este dispositivo"}, status=401)
+        return await handler(request)
+
+    @routes.post("/api/pair")
+    async def pair_post(req):
+        try:
+            body = await req.json()
+        except ValueError:
+            body = {}
+        nombre = body.get("nombre") or nombre_dispositivo(req.headers.get("User-Agent", ""))
+        tok, err = pair().emparejar(req, body.get("codigo"), nombre)
+        if err:
+            return web.json_response({"ok": False, "error": err}, status=403)
+        resp = web.json_response({"ok": True, "token": tok})
+        resp.set_cookie("spotpad_dev", tok, max_age=10 * 365 * 86400, httponly=True, samesite="Lax", path="/")
+        return resp
+
+    @routes.get("/api/pair/me")
+    async def pair_me(req):
+        pr = pair()
+        return web.json_response({"ok": True, "enabled": pr.d["enabled"], "local": Pairing.es_local(req),
+                                  "paired": pr.autorizado(req)})
+
+    @routes.get("/api/pair/info")
+    async def pair_info(req):
+        solo_local(req)
+        return web.json_response({"ok": True, **pair().info()})
+
+    @routes.put("/api/pair/config")
+    async def pair_config(req):
+        solo_local(req)
+        body = await req.json()
+        if "enabled" in body:
+            pair().set_enabled(bool(body["enabled"]))
+        if body.get("new_code"):
+            pair().nuevo_codigo()
+        return web.json_response({"ok": True, **pair().info()})
+
+    @routes.delete("/api/pair/devices")
+    async def pair_forget_all(req):
+        solo_local(req)
+        pair().quitar(None)
+        return web.json_response({"ok": True, **pair().info()})
+
+    @routes.delete("/api/pair/devices/{id}")
+    async def pair_forget(req):
+        solo_local(req)
+        pair().quitar(req.match_info["id"])
+        return web.json_response({"ok": True, **pair().info()})
+
+    @routes.get("/pair.js")
+    async def pair_js(_):
+        return web.Response(text=(RES / "static" / "pair.js").read_text("utf-8"), content_type="text/javascript",
+                            headers={"Cache-Control": "no-store"})
+
+    app = web.Application(middlewares=[guardia])
     app["port"] = 8765
     app["rec"] = rec
     app.add_routes(routes)
     return app
+
+
+def nombre_dispositivo(ua: str) -> str:
+    u = ua or ""
+    for k, n in (("iPad", "iPad"), ("iPhone", "iPhone"), ("Android", "Android"), ("Macintosh", "Mac"),
+                 ("Windows", "Windows"), ("Linux", "Linux")):
+        if k in u:
+            return n
+    return "Dispositivo"
 
 
 def ipad_url(port: int) -> str:
@@ -2830,7 +3126,7 @@ font:16px -apple-system,system-ui,sans-serif;text-align:center}}.q{{background:#
 display:inline-block;width:300px}}.q svg{{width:100%;height:auto;display:block}}code{{font:600 22px ui-monospace,Menlo,monospace;
 color:#E8A33D}}p{{color:#8d8c94;max-width:420px;margin:14px auto}}</style></head><body><div>
 <div class="q">{qr}</div><p>Escaneá con la cámara del iPad, o escribí en Safari:</p><code>{url}</code>
-<p>En Safari: Compartir → Agregar a inicio, para usarla a pantalla completa.<br>El iPad y esta computadora tienen que estar en la misma red.</p>
+{codigo}<p>En Safari: Compartir → Agregar a inicio, para usarla a pantalla completa.<br>El iPad y esta computadora tienen que estar en la misma red.</p>
 <div style="margin-top:36px"><div class="q" style="width:200px">{aqr}</div>
 <p><b>Vista para el artista</b> (celular): las props pendientes y lo que se está grabando.</p><code style="font-size:16px">{aurl}</code></div>
 </div></body></html>"""

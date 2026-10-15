@@ -61,13 +61,39 @@ def spotpad_url(addr: str, path: str) -> str:
     return a + path
 
 
-def call(addr, path, body=None, timeout=60):
+PAIR = {"code": "", "token": ""}      # código de emparejamiento (4 dígitos) y token que devolvió SpotPad
+
+
+def _pedir(addr, path, body, timeout):
     data = None if body is None else json.dumps(body).encode()
+    headers = {"Content-Type": "application/json"}
+    if PAIR["token"]:
+        headers["X-SpotPad-Token"] = PAIR["token"]
     req = urllib.request.Request(spotpad_url(addr, path), data=data, method="POST" if body is not None else "GET",
-                                 headers={"Content-Type": "application/json"})
+                                 headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
+def call(addr, path, body=None, timeout=60):
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode())
+        try:
+            return _pedir(addr, path, body, timeout)
+        except urllib.error.HTTPError as e:
+            if e.code != 401:
+                raise
+            # SpotPad pide emparejar: con el código escrito al lado de la dirección se empareja solo
+            if not PAIR["code"]:
+                raise RuntimeError("SpotPad pide el código de emparejamiento: escribilo (4 dígitos, está en el menú "
+                                   "de SpotPad en la Mac) al lado de la dirección.")
+            try:
+                PAIR["token"] = _pedir(addr, "/api/pair", {"codigo": PAIR["code"], "nombre": "Analizador"}, 15).get("token", "")
+            except urllib.error.HTTPError as e2:
+                try:
+                    raise RuntimeError(json.loads(e2.read().decode()).get("error") or "Código incorrecto")
+                except ValueError:
+                    raise RuntimeError("Código de emparejamiento incorrecto")
+            return _pedir(addr, path, body, timeout)
     except urllib.error.HTTPError as e:
         try:
             msg = json.loads(e.read().decode()).get("error") or str(e)
@@ -119,7 +145,15 @@ class App:
         r += 1
         ttk.Label(f, text="SpotPad (dirección)").grid(row=r, column=0, sticky="w")
         self.addr = tk.StringVar(value=self.cfg.get("addr", "localhost:8765"))
-        ttk.Entry(f, textvariable=self.addr).grid(row=r, column=1, sticky="ew", padx=6)
+        self.code = tk.StringVar(value=self.cfg.get("code", ""))
+        PAIR["code"] = self.code.get().strip()
+        self.code.trace_add("write", lambda *_: PAIR.update(code=self.code.get().strip(), token=""))
+        af = ttk.Frame(f)
+        af.grid(row=r, column=1, sticky="ew", padx=6)
+        af.columnconfigure(0, weight=1)
+        ttk.Entry(af, textvariable=self.addr).grid(row=0, column=0, sticky="ew")
+        ttk.Label(af, text="Código").grid(row=0, column=1, padx=(8, 4))
+        ttk.Entry(af, textvariable=self.code, width=6).grid(row=0, column=2)
         ttk.Button(f, text="Probar", command=self.test_spotpad).grid(row=r, column=2)
         r += 1
         ttk.Label(f, text="Si SpotPad está en otra computadora, poné la dirección que muestra su página "
@@ -197,7 +231,7 @@ class App:
         self.b_cancel.configure(state="normal" if b else "disabled")
 
     def remember(self):
-        self.cfg.update(addr=self.addr.get().strip(), sens=round(self.sens.get(), 2),
+        self.cfg.update(addr=self.addr.get().strip(), code=self.code.get().strip(), sens=round(self.sens.get(), 2),
                         markers=self.o_markers.get(), surfaces=self.o_surf.get(),
                         dir=os.path.dirname(self.video.get()) or self.cfg.get("dir", ""))
         save_cfg(self.cfg)

@@ -22,6 +22,8 @@ assert classify_fts("SNEAKERS 01", R)["type"] == "shoe"
 assert classify_fts("EMILY HEELS", R) == {"type": "char", "character": "EMILY", "shoe": "Heels"}
 assert classify_fts("JUNE", R) == {"type": "char", "character": "JUNE", "shoe": None}
 assert classify_fts("Group 01", R)["shoe"] == "Group"
+assert classify_fts("BAREFOOT 01.dup3", R) == {"type": "shoe", "character": None, "shoe": "Barefoot"}
+assert classify_fts("Animal", R)["shoe"] == "Animals" and classify_fts("NOTAS", R)["type"] == "other"
 
 # Color → calzado: sale de los tracks de calzado; Group/Animals no cuentan
 col = shoe_colors([t for t in tracks if t["folder"] == "FTS"], R)

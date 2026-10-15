@@ -56,8 +56,13 @@ def tipo_imagen(data: bytes):
 MIME = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
 
 
+# Personajes genéricos de pasos (configuración genérica, footsteps.json → «genericos»)
+GENERICOS = ["Man", "Woman", "Boy", "Girl", "Old Man", "Old Woman", "Extra Man", "Extra Girl",
+             "Extra Couple", "Group"]
+
+
 def vacio(nombre: str) -> dict:
-    return {"nombre": nombre, "personajes": [], "char_shoes": {},
+    return {"nombre": nombre, "personajes": [], "char_shoes": {}, "extras": [],
             "botonera": {"categorias": [], "agregados": {}, "ocultas": [], "ocultos": {}}}
 
 
@@ -81,7 +86,8 @@ class ProjectStore:
             raw = json.loads((self.dir(nombre) / "proyecto.json").read_text("utf-8"))
         except (FileNotFoundError, ValueError):
             return d
-        d.update({k: raw[k] for k in ("personajes", "char_shoes") if isinstance(raw.get(k), type(d[k]))})
+        d.update({k: raw[k] for k in ("personajes", "char_shoes", "extras") if isinstance(raw.get(k), type(d[k]))})
+        d["extras"] = [str(x).strip() for x in d["extras"] if str(x).strip()]
         b = raw.get("botonera") or {}
         for k, dflt in d["botonera"].items():
             if isinstance(b.get(k), type(dflt)):
@@ -105,6 +111,25 @@ class ProjectStore:
             if src.exists() and not dst.exists() and src != dst:
                 shutil.copytree(src, dst)
                 d = self.load(nuevo); self.save(nuevo, d)
+
+    # -- personajes extra de pasos (los que se suman con «+ Otro») --------------- #
+    def agregar_extra(self, proy: str, nombre: str) -> list:
+        nombre = re.sub(r"\s+", " ", str(nombre or "")).strip()[:60]
+        if not nombre:
+            raise ValueError("Escribí el nombre")
+        with self.lock:
+            d = self.load(proy)
+            if naming.norm(nombre) not in {naming.norm(x) for x in d["extras"]}:
+                d["extras"].append(nombre)
+                self.save(proy, d)
+            return d["extras"]
+
+    def quitar_extra(self, proy: str, nombre: str) -> list:
+        with self.lock:
+            d = self.load(proy)
+            d["extras"] = [x for x in d["extras"] if naming.norm(x) != naming.norm(nombre)]
+            self.save(proy, d)
+            return d["extras"]
 
     # -- personajes --------------------------------------------------------- #
     def guardar_personaje(self, proy: str, body: dict) -> dict:
@@ -326,12 +351,36 @@ def calzados_sesion(fts_tracks: list, rules) -> list:
     return out
 
 
-def fts_destino(personaje: str, calzado: str, fts_tracks: list, rules, alias=()) -> dict:
+def tracks_de_calzado(calzado: str, fts_tracks: list, rules) -> list:
+    """Tracks de la carpeta de pasos que son de ese calzado, en el orden de la carpeta."""
+    return [t["name"] for t in fts_tracks
+            if (c := naming.classify_fts(t["name"], rules))["type"] == "shoe" and c["shoe"].lower() == calzado.lower()]
+
+
+def nombre_track_nuevo(tracks: list) -> str:
+    """Siguiente track de un calzado: «SNEAKERS 01», «SNEAKERS 02» → «SNEAKERS 03»; «Varios SLIPERS» →
+    «Varios SLIPERS 02». Se ignora lo que Pro Tools agrega después de un punto («.dup1»)."""
+    base, mayor = "", 1
+    for t in tracks:
+        b = t.split(".")[0].strip()
+        m = re.match(r"^(.*?)\s*(\d+)$", b)
+        if m:
+            base = base or m.group(1).strip()
+            mayor = max(mayor, int(m.group(2)))
+        else:
+            base = base or b
+    return f"{base} {mayor + 1:02d}"
+
+
+def fts_destino(personaje: str, calzado: str, fts_tracks: list, rules, alias=(), ocupados=None, rango=None) -> dict:
     """Dónde va un paso de «personaje» con «calzado».
       * Principal con track propio → su track. El clip se llama como el personaje; si el calzado no es
         el suyo, «Henry Sneakers» (así lo lee después el modo grabación).
-      * Si no tiene track → el track de ese calzado, con el nombre del personaje como clip («Sonia»).
-    Devuelve {"track", "clip", "principal"}; ValueError con el motivo si no se puede."""
+      * Si no tiene track → un track de ese calzado, con el nombre del personaje como clip («Sonia»):
+        el primero que no tenga nada en el rango (dos personajes de zapatillas a la vez van a
+        SNEAKERS 01 y SNEAKERS 02). Si están todos ocupados, {"crear": nombre, "despues_de": track}.
+    ocupados = {track: [(inicio, fin), …]} y rango = (a, b), en samples; sin ellos, el primer track.
+    Devuelve {"track", "clip", "principal"} (o con "crear"); ValueError con el motivo si no se puede."""
     personaje = re.sub(r"\s+", " ", str(personaje or "")).strip()
     if not personaje:
         raise ValueError("Elegí el personaje")
@@ -351,14 +400,20 @@ def fts_destino(personaje: str, calzado: str, fts_tracks: list, rules, alias=())
             return {"track": t["name"], "clip": clip, "principal": True}
     if not calzado:
         raise ValueError(f"«{personaje}» no tiene track propio: elegí el calzado")
-    for t in fts_tracks:
-        c = naming.classify_fts(t["name"], rules)
-        if c["type"] == "shoe" and c["shoe"].lower() == calzado.lower():
-            return {"track": t["name"], "clip": personaje, "principal": False}
-    raise ValueError(f"No hay un track de «{calzado}» en la carpeta de pasos")
+    tracks = tracks_de_calzado(calzado, fts_tracks, rules)
+    if not tracks:
+        raise ValueError(f"No hay un track de «{calzado}» en la carpeta de pasos")
+    if ocupados is None or rango is None:
+        return {"track": tracks[0], "clip": personaje, "principal": False}
+    a, b = rango
+    for t in tracks:
+        if not any(min(fin, b) > max(ini, a) for ini, fin in ocupados.get(t, [])):
+            return {"track": t, "clip": personaje, "principal": False}
+    return {"track": "", "crear": nombre_track_nuevo(tracks), "despues_de": tracks[-1],
+            "clip": personaje, "principal": False}
 
 
-def vista_personajes(d: dict, fts_tracks: list, rules, secundarios=()) -> dict:
+def vista_personajes(d: dict, fts_tracks: list, rules, secundarios=(), genericos=None) -> dict:
     """Carímetro: los guardados (con su track en la sesión si lo tienen) + los principales de la sesión
     que todavía no están guardados («nuevo»). Secundarios = nombres usados en tracks de calzado."""
     rules = {**rules, "char_shoes": {**(rules.get("char_shoes") or {}), **d.get("char_shoes", {})}}
@@ -384,7 +439,9 @@ def vista_personajes(d: dict, fts_tracks: list, rules, secundarios=()) -> dict:
     for s in secundarios:
         if naming.norm(s) not in todos and s not in sec:
             sec.append(s)
-    return {"proyecto": d["nombre"], "personajes": out, "secundarios": sec,
+    gen = [g for g in (GENERICOS if genericos is None else genericos) if naming.norm(g) not in todos]
+    ext = [x for x in d.get("extras", []) if naming.norm(x) not in todos | {naming.norm(g) for g in gen}]
+    return {"proyecto": d["nombre"], "personajes": out, "secundarios": sec, "genericos": gen, "extras": ext,
             "calzados": calzados_sesion(fts_tracks, rules)}
 
 
@@ -479,9 +536,10 @@ def importar_proyecto(store: ProjectStore, pkg: dict, modo="mezclar", nombre=Non
     items = [i for i in items if isinstance(i, dict) and i.get("track") and i.get("name")]
     tmp = vacio(nombre)
     # Normalizar lo que viene (mismas validaciones que lo cargado a mano)
-    for k in ("personajes", "char_shoes"):
+    for k in ("personajes", "char_shoes", "extras"):
         if isinstance(nuevo.get(k), type(tmp[k])):
             tmp[k] = nuevo[k]
+    tmp["extras"] = [str(x).strip()[:60] for x in tmp["extras"] if str(x).strip()]
     for k, dflt in tmp["botonera"].items():
         if isinstance((nuevo.get("botonera") or {}).get(k), type(dflt)):
             tmp["botonera"][k] = nuevo["botonera"][k]

@@ -275,12 +275,42 @@ def main():
             # Salida inmediata: si Pro Tools dejó un pedido colgado, no esperamos por él
             threading.Timer(0.3, lambda: os._exit(0)).start()
 
+    def pair_items():
+        """Código de emparejamiento: se ve y se cambia desde acá; se puede apagar."""
+        pr = bridge.PAIR or bridge.Pairing(DATA / "dispositivos.json")
+        if bridge.PAIR is None:
+            bridge.PAIR = pr
+        on = pr.d["enabled"]
+
+        def toggle(icon_, item_):
+            pr.set_enabled(not on)
+            hk.notify("SpotPad", "Emparejamiento apagado: cualquier dispositivo de la red puede usar SpotPad."
+                      if on else f"Emparejamiento prendido. Código: {pr.d['code']}", icon)
+            icon.update_menu()
+
+        def nuevo(icon_, item_):
+            c = pr.nuevo_codigo()
+            hk.notify("SpotPad", f"Código nuevo: {c}", icon); icon.update_menu()
+
+        def olvidar(icon_, item_):
+            pr.quitar(None)
+            hk.notify("SpotPad", "Dispositivos olvidados: van a tener que escribir el código de nuevo.", icon)
+            icon.update_menu()
+
+        its = [Item(f"Código: {pr.d['code']}" if on else "Emparejamiento apagado", lambda *_: None, enabled=False),
+               Item("Apagar emparejamiento" if on else "Prender emparejamiento", toggle)]
+        if on:
+            its += [Item("Código nuevo", nuevo)]
+        its += [Item(f"Olvidar los {len(pr.d['devices'])} dispositivos", olvidar, visible=lambda _: bool(pr.d["devices"]))]
+        return Menu(*its)
+
     menu = Menu(
         Item(upd_label, do_update, visible=lambda _: upd.available() or upd.state in ("downloading", "installing")),
         Item(lambda _: f"iPad: {ipad_url(a.port)}", lambda *_: webbrowser.open(local + "/conectar")),
         Item("Conectar iPad (QR)", lambda *_: webbrowser.open(local + "/conectar"), default=True),
         Item("Abrir SpotPad acá", lambda *_: webbrowser.open(local)),
         Menu.SEPARATOR,
+        Item("Emparejamiento de dispositivos", Menu(lambda: pair_items().items)),
         Item("Atajos de teclado", Menu(lambda: keys_items().items)),
         Item("Reconectar con Pro Tools", do_reconnect),
         Item(lambda _: "Buscando…" if upd.state == "checking" else "Buscar actualización", do_update,

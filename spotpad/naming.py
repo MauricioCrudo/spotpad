@@ -42,7 +42,10 @@ DEFAULT_RULES = {
         {"key": "OTHER SHOES", "label": "Other Shoes", "color": False},
         {"key": "GROUP", "label": "Group", "color": False},
         {"key": "ANIMALS", "label": "Animals", "color": False},
+        {"key": "ANIMAL", "label": "Animals", "color": False},
     ],
+    # Tracks de la carpeta de pasos que no son personajes ni calzado (anotaciones)
+    "no_personajes": ["NOTAS", "NOTA", "NOTES", "NOTE", "IA DUDAS"],
     "color_shoes": {},     # "#ff13355f": "Male Shoes"   (corrige lo deducido por color)
     "char_shoes": {},      # "JUNE": "Fem Shoes"         (calzado fijo de un personaje)
     "surface_alias": {},   # "Gritty Concrete Street": "Gritty"
@@ -58,8 +61,8 @@ def base_name(track: str) -> str:
     """«Varios FEM Shoes 04» → «FEM SHOES»."""
     n = norm(track)
     n = re.sub(r"^VARIOS\s+", "", n)
+    n = re.sub(r"\.DUP\d+$", "", n)          # «BAREFOOT 01.dup1»: primero el .dup, después el número
     n = re.sub(r"(\s+\d+)+$", "", n)
-    n = re.sub(r"\.DUP\d+$", "", n)
     return n.strip()
 
 
@@ -117,8 +120,11 @@ def folder_kind(folder: str, rules) -> Optional[str]:
 
 
 def classify_fts(track: str, rules) -> dict:
-    """Track de la carpeta de pasos → {"type": "shoe"|"char", "character", "shoe"}."""
+    """Track de la carpeta de pasos → {"type": "shoe"|"char"|"other", "character", "shoe"}.
+    «other»: anotaciones como «NOTAS» (no son personaje ni calzado)."""
     b = base_name(track)
+    if b in {norm(x) for x in rules.get("no_personajes", [])}:
+        return {"type": "other", "character": None, "shoe": None}
     for sh in _shoes(rules):
         k = norm(sh["key"])
         if b == k:
@@ -171,6 +177,8 @@ def build_queue(tracks: List[dict], edl: Dict[str, list], sweep: List[str], rule
     for tname in sweep:
         kind = kind_of.get(tname)
         cls = classify_fts(tname, rules) if kind == "footsteps" else None
+        if cls and cls["type"] == "other":       # «NOTAS»: anotaciones, no se graban
+            continue
         for ev in edl.get(tname, []):
             key = f"{tname}|{ev.start}"
             raw_clip = strip_suffix(ev.clip)          # sin «.grp.01» ni «Ref»

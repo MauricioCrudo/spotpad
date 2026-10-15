@@ -17,6 +17,7 @@ spotpad/            App principal (bridge Python + web)
   notifier.py       Notificaciones nativas (UserNotifications) con nombre e ícono de SpotPad; cae a osascript.
   updater.py        Busca la release «ultima» de GitHub, baja el .zip de su plataforma y reemplaza la app.
   edicion.py        Consolidar / Regrabar. Aislado, apagado por defecto (Ajustes → edición).
+  static/pair.js    Pantalla del código de emparejamiento (la cargan las tres páginas): intercepta el 401 del bridge.
   naming.py         Nombres: prefijo Prps/Fts, Title Case por palabra, se corta todo lo que sigue a un «.», REF.
   edl.py, tc.py     Parseo del texto de ExportSessionInfoAsText (clips, mutes, tiempos).
   ai_import.py      Recibe marcas del analizador (/api/ai/*).
@@ -91,6 +92,23 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
 - Mantener el tráfico de fondo bajo: eventos (SubscribeToEvents) apagados por defecto; polling espaciado.
 - Si existe la skill `pro-tools-ptsl`, leerla antes de tocar código de PTSL.
 
+## Emparejamiento (0.17.0)
+
+- Prendido por defecto: `Pairing` en `bridge.py`, middleware que da 401 `{pair: true}` a `/api/*` sin cookie
+  `spotpad_dev` ni header `X-SpotPad-Token`, salvo desde esta Mac (localhost / su propia IP de la red).
+  Abiertos: `/api/health`, `/api/pair`, `/api/pair/me`, las páginas y `/pair.js`.
+- Código de 4 dígitos, fijo hasta pedir uno nuevo, en `<datos>/dispositivos.json` (tokens con hash). 5 fallos por
+  IP o 25 en total → bloqueo de 10 min. `/conectar`, `/api/pair/info` y la configuración: solo desde la Mac.
+- Se apaga/prende y se cambia desde el menú de SpotPad (barra de menú) y desde Ajustes abierto en la Mac.
+- El analizador escribe el código al lado de la dirección y se empareja solo (header `X-SpotPad-Token`).
+- HTTP sin cifrar: frena a quien entre a la red, no a quien espíe el tráfico.
+
+## Botonera: categorías juntas y grupos
+
+- Mantener apretada una categoría (o ⇧/⌘ + clic) la suma a la elegida; en Ajustes se elige «En fila» (tira vertical
+  chica con el nombre entre categorías) o «Una debajo de otra». «Guardar como grupo» crea una pestaña (genérica,
+  `presets.json` → `grupos`). Lo que se muestra junto es del dispositivo (localStorage).
+
 ## Convenciones del dominio
 
 - Tracks de grabación: `Prps <Nombre>` / `Fts <Nombre>`; las categorías de props preseteadas siempre van con Prps
@@ -134,7 +152,7 @@ Para cambios de interfaz: levantar `bridge.py --mock` y mirar en anchos de iPad 
   3. Comando para **compilar SpotPad Apple Silicon en la Mac** (M4) y probar la app real antes de publicar.
      Publicar sigue siendo solo desde el CI: el actualizador necesita los 10 archivos con su nombre exacto.
 - Diseño a una mano para el celu (sugeridos según el track seleccionado, cambiar de categoría deslizando,
-  «Igual que antes», pasos en dos toques, sin teclado) + varias categorías como columnas en iPad/compu. Propuesto, a confirmar.
+  «Igual que antes», sin teclado). Propuesto, a confirmar. (Pasos en dos toques y varias categorías juntas: hechos en 0.17.0.)
 - Banco de prueba de EmbeddingGemma 2 vs SigLIP (imagen, video, audio) con un episodio spoteado a mano. Falta saber
   si el video trae sonido directo.
 - Voz para elegir nombres: buscar una opción mejor que el atajo de iOS (se postergó).

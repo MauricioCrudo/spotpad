@@ -160,4 +160,25 @@ bridge.CURRENT["session"] = "Otra_Peli_R1"
 assert "JUNE" not in bridge.load_rules()["char_shoes"] and bridge.preset_prop("Paper")
 bridge.PROJECTS.merge("Serie", [{"track": "Props 1", "name": "Remote"}, {"track": "Props 1", "name": "remote"}])
 assert bridge.PROJECTS.items("Serie") == [{"track": "Props 1", "name": "Remote", "uses": 1, "last": 0}]
+# Dos personajes del mismo calzado a la vez: el segundo va al siguiente track libre; si no hay, se crea
+assert P.nombre_track_nuevo(["SNEAKERS 01", "SNEAKERS 02"]) == "SNEAKERS 03"
+assert P.nombre_track_nuevo(["Varios SLIPERS"]) == "Varios SLIPERS 02"
+assert P.nombre_track_nuevo(["BAREFOOT 01", "BAREFOOT 01.dup1"]) == "BAREFOOT 02"
+snk = [{"name": "SNEAKERS 01", "color": ""}, {"name": "SNEAKERS 02", "color": ""}]
+d = P.fts_destino("Man", "Sneakers", snk, rules, ocupados={"SNEAKERS 01": [(100, 300)]}, rango=(200, 400))
+assert d["track"] == "SNEAKERS 02" and d["clip"] == "Man", d
+d = P.fts_destino("Man", "Sneakers", snk, rules, ocupados={"SNEAKERS 01": [(100, 300)]}, rango=(300, 400))
+assert d["track"] == "SNEAKERS 01", d                                  # tocarse en el borde no es pisarse
+d = P.fts_destino("Woman", "Sneakers", snk, rules, ocupados={"SNEAKERS 01": [(0, 500)], "SNEAKERS 02": [(250, 260)]},
+                  rango=(200, 400))
+assert d["crear"] == "SNEAKERS 03" and d["despues_de"] == "SNEAKERS 02" and d["clip"] == "Woman", d
+# Genéricos y extras del proyecto en la vista de Pasos
+S2 = P.ProjectStore(pathlib.Path(tempfile.mkdtemp()))
+assert S2.agregar_extra("Peli", "  Sonia ") == ["Sonia"] and S2.agregar_extra("Peli", "sonia") == ["Sonia"]
+S2.agregar_extra("Peli", "Taxista")
+v = P.vista_personajes(S2.load("Peli"), [], rules)
+assert v["genericos"][:4] == ["Man", "Woman", "Boy", "Girl"] and "Old Woman" in v["genericos"], v["genericos"]
+assert v["extras"] == ["Sonia", "Taxista"], v["extras"]
+assert S2.quitar_extra("Peli", "SONIA") == ["Taxista"]
+assert P.vista_personajes(S2.load("Peli"), [], rules, genericos=["Man"])["genericos"] == ["Man"]
 print("personajes OK")
