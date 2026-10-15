@@ -69,10 +69,10 @@ def con_teclas(t, eng, falla=()):
     run0 = eng.client.run
     def run(op):
         run0(op)
-        if type(op).__name__ == "CId_RenameTargetClip":
-            for tr in eng.edl:
-                eng.edl[tr] = [EdlEvent(tr, op.request.new_name, ev.start, ev.end) if ev.clip == op.request.clip_name
-                               else ev for ev in eng.edl[tr]]
+        if type(op).__name__ == "CId_RenameSelectedClip":
+            tr = eng.sel[-1][0]
+            eng.edl[tr] = [EdlEvent(tr, op.request.new_name, ev.start, ev.end) if ev.start == 100 else ev
+                           for ev in eng.edl[tr]]
     eng.client.run = run
     return t
 
@@ -90,7 +90,7 @@ eng = Eng([T("Chairs", 1, "a", sel=True), T("Bags", 2, "b", sel=True)],
 t = con_teclas(tools(eng), eng, falla=("Bags",))
 run1 = eng.client.run
 def run_usado(op):
-    if type(op).__name__ == "CId_RenameTargetClip" and op.request.new_name == "Prps Chair Wood":
+    if type(op).__name__ == "CId_RenameSelectedClip" and op.request.new_name == "Prps Chair Wood":
         raise Exception("ErrType 100: PT_UnknownError (That name is already used by another file.)")
     run1(op)
 eng.client.run = run_usado
@@ -101,8 +101,8 @@ assert eng.renamed == ["Prps Chair Wood 2"] and "no consolidó" in r["msg"], (en
 eng = Eng([T("Chairs", 1, "a", sel=True)], {"Chairs": [EdlEvent("Chairs", "Prps Chair Wood_03", 90, 150)]})
 t = con_teclas(tools(eng), eng)
 def run_falla(op):
-    if type(op).__name__ == "CId_RenameTargetClip":
-        raise Exception("ErrType 126: PT_InvalidParameter (Clip not found)")
+    if type(op).__name__ == "CId_RenameSelectedClip":
+        raise Exception("ErrType 126: PT_InvalidParameter (No clip is selected)")
 eng.client.run = run_falla
 try:
     t.consolidate(); raise AssertionError
@@ -117,6 +117,7 @@ eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Campera"
 t = con_teclas(tools(eng), eng)
 r = t.consolidate()
 assert eng.renamed == ["Campera"] and eng.edl["Props"][0].clip == "Campera", (eng.renamed, eng.edl)
+assert eng.sel.count(["Props"]) >= 2, eng.sel          # se vuelve a marcar el rango antes de renombrar
 eng = Eng([T("Props", 1, "p", sel=True)], {"Props": [EdlEvent("Props", "Props_01", 100, 200)]})
 try:                                                  # reconsolidar algo sin nombre propio: no lo renombra «Props»
     con_teclas(tools(eng), eng).consolidate(); raise AssertionError
@@ -198,4 +199,5 @@ for f in ("edicion.py", "bridge.py"):
     code = "\n".join(l for l in pathlib.Path(__file__).with_name(f).read_text("utf-8").splitlines() if not l.strip().startswith("#"))
     assert "GetExportMixSourceList\")" not in code and "GetColorPalette')" not in code, f
     assert "CId_ConsolidateClip" not in code, f       # deja un tono de 1 kHz en Pro Tools 2025.12
+    assert "CId_RenameTargetClip" not in code, f      # «Can't found clip» aunque el clip exista
 print("edición OK")

@@ -197,20 +197,18 @@ class EditTools:
                 return evs[0].clip
         return None
 
-    def _rename_free(self, e, name, actual=""):
-        """Renombra el clip consolidado (y su archivo). Con `actual` (el nombre que le puso Pro Tools)
-        usa RenameTargetClip, que no depende de la selección; si no, el clip seleccionado.
-        Si ya hay un archivo con ese nombre («That name is already used») prueba «Nombre 2», «Nombre 3»…"""
+    def _rename_free(self, e, name):
+        """Renombra el clip seleccionado en el timeline (y su archivo). Si ya hay un archivo con ese
+        nombre («That name is already used») prueba «Nombre 2», «Nombre 3»…
+        Ojo: RenameTargetClip (por nombre) no sirve: en Pro Tools 2025.12 contesta «Can't found clip»
+        aunque el clip esté en la Clip List (probado en la sesión real)."""
         from bridge import _op
         from ptsl import PTSL_pb2 as pt
         for i in range(1, 30):
             want = name if i == 1 else f"{name} {i}"
             try:
-                if actual:
-                    e.client.run(_op("CId_RenameTargetClip")(clip_name=actual, new_name=want, rename_file=True))
-                else:
-                    e.client.run(_op("CId_RenameSelectedClip")(new_name=want, rename_file=True,
-                                                               clip_location=pt.CL_Timeline))
+                e.client.run(_op("CId_RenameSelectedClip")(new_name=want, rename_file=True,
+                                                           clip_location=pt.CL_Timeline))
                 return want
             except Exception as ex:              # noqa: BLE001
                 if "already used" not in str(ex):
@@ -245,17 +243,24 @@ class EditTools:
                     notes.append(f"«{t.name}»: Pro Tools no consolidó (¿estaba Pro Tools al frente?)")
                     log.info("Consolidar: %s no quedó consolidado", t.name)
                     continue
-                # Pro Tools nombra el consolidado como el track («Props_01»): se renombra por ese nombre
-                # (RenameTargetClip), porque después del atajo el clip no queda seleccionado para el SDK.
+                # Pro Tools nombra el consolidado como el track («Props_01») y después del atajo el clip no
+                # queda seleccionado para el SDK («No clip is selected»): se vuelve a marcar el rango, que
+                # ahora es justo el clip consolidado, y se renombra el seleccionado.
+                self._apply_selection(e, [t.name], a, b)
                 if not name:
                     notes.append(f"«{t.name}» consolidado como «{hecho}»: ningún clip tenía nombre propio")
                     continue
                 try:
-                    name = self._rename_free(e, name, hecho)
+                    name = self._rename_free(e, name)
                 except Exception as ex:          # noqa: BLE001
                     notes.append(f"«{t.name}» consolidado como «{hecho}», sin renombrar: {ex}")
                     continue
-                # RenameTargetClip va por el nombre exacto del clip: si no falló, quedó (no hace falta releer)
+                # Verificar que el nombre quedó en el clip consolidado (y no en otro)
+                ev2 = first_clip(self._edl(e, solo_sel=True).get(t.name, []), a, b)
+                if ev2 is None or base_clip_name(ev2.clip) != name:
+                    notes.append(f"«{t.name}»: consolidado, pero el clip quedó como «{ev2.clip if ev2 else '?'}»")
+                    log.info("Consolidar: %s → el rename no quedó en el clip (%s)", t.name, ev2.clip if ev2 else None)
+                    continue
                 done.append(name)
                 log.info("Consolidar: %s → «%s» (atajo %d ms, consolidado visto a los %d ms, renombrado en %d ms)",
                          t.name, name, (t1 - t0) * 1000, (t2 - t1) * 1000, (time.time() - t2) * 1000)
