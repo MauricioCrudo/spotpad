@@ -32,7 +32,7 @@ import naming
 import ai_import
 import proyecto
 
-VERSION = "0.17.1"
+VERSION = "0.17.2"
 HERE = Path(__file__).parent
 # Archivos de la app (página, presets por defecto): dentro del .app cuando está compilada
 RES = Path(getattr(sys, "_MEIPASS", HERE))
@@ -752,7 +752,22 @@ class ProTools:
             raise
         clip = (name or target.name).strip()
         log.info("group-on: renombrar a «%s»", clip)
-        e.rename_selected_clip(new_name=clip, rename_file=False, clip_location=pt.CL_Timeline)
+        # A veces Pro Tools (sobre todo 2024.10) agrupa pero no deja el clip nuevo seleccionado y el
+        # rename contesta «No clip is selected». Se vuelve a marcar el rango en el track y se reintenta.
+        for intento in range(3):
+            try:
+                e.rename_selected_clip(new_name=clip, rename_file=False, clip_location=pt.CL_Timeline)
+                break
+            except Exception as ex:
+                if "No clip is selected" not in str(ex) or intento == 2:
+                    if "No clip is selected" in str(ex):
+                        raise SpotError(f"Se creó el clip en «{target.name}», pero Pro Tools no lo dejó seleccionado "
+                                        f"para ponerle «{clip}». Tocá el clip en Pro Tools y renombralo, o deshacé y probá de nuevo.")
+                    raise
+                log.info("group-on: el clip no quedó seleccionado, vuelvo a marcar el rango (intento %d)", intento + 2)
+                time.sleep(0.15 * (intento + 1))
+                e.select_tracks_by_name([target.name])
+                e.set_timeline_selection(in_time=str(sel_in), out_time=str(sel_out), location_type=pt.TLType_Samples)
         return {"ok": True, "msg": f"«{clip}» en {target.name}", "track": target.name, "clip": clip}
 
     def diag(self):

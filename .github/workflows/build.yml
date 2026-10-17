@@ -56,6 +56,7 @@ jobs:
           python test_updater.py
           python test_edicion.py
           python test_emparejar.py
+          python test_groupon.py
       - name: Compilar
         run: pyinstaller --noconfirm spotpad.spec
       # Firma con el certificado propio (secretos de .github/crear_firma.sh): así macOS reconoce cada versión

@@ -125,6 +125,21 @@ def nombre_propio(events, track, a, b):
     return ""
 
 
+def ptsl_viejo(e) -> bool:
+    """Pro Tools anterior a 2025 (la compu del estudio, 2024.10, contesta «5»; los nuevos, el año: 2025, 2026…)."""
+    try:
+        return int(e.ptsl_version()) < 2025
+    except Exception:                            # noqa: BLE001
+        return False
+
+
+def nombres_viejos(j: str) -> str:
+    """El bounce con los nombres de enum de antes de 2025.06: Pro Tools 2024.10 no conoce «EMSType_Bus» ni
+    «EMFType_WAV» (no encuentra la salida: «None of the specified mix sources are present»); conoce «Bus» y «EM_WAV»."""
+    j = re.sub(r'"EMSType_(PhysicalOut|Bus|Output)"', r'"\1"', j)
+    return re.sub(r'"EMFType_(None|MOV|WAV|AIFF|MP3|MXFOPAtom|WAVADM)"', r'"EM_\1"', j)
+
+
 class EditTools:
     def __init__(self, pt, settings_loader):
         self.pt = pt
@@ -383,6 +398,7 @@ class EditTools:
             if not src:
                 raise EditError("Escribí en Ajustes la salida que escuchás, como figura en Bounce Mix (p. ej. «Out 1-2»)")
 
+            viejo = ptsl_viejo(e)
             soloed = {t.name for t in tracks if self.pt._is_set(t.track_attributes.is_soloed)}
             sel_names = [t.name for t in sel]
             tmp = tempfile.mkdtemp(prefix="spotpad-regrab-")
@@ -424,6 +440,8 @@ class EditTools:
                             offline_bounce=pt.TBool_True,
                             start_time=pt.TimelineLocation(location=str(a), time_type=pt.TLType_Samples),
                             end_time=pt.TimelineLocation(location=str(b), time_type=pt.TLType_Samples))
+                        if viejo:              # Pro Tools < 2025: nombres de enum sin el prefijo nuevo
+                            exp.json_messup = nombres_viejos
                         log.info("Regrabar: bounce de %s (%s «%s») %s-%s → %s",
                                  ", ".join(sel_names), etiqueta, src, a, b, carpeta)
                         try:
